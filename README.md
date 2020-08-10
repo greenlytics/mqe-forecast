@@ -21,9 +21,26 @@ Load track data saved to: ./data/raw/gefcom2014-load-raw.csv
 ```
 
 ## Preprocessing the GEFCom2014 data
-Next step is to preprocess the data with feature extraction. 
+## Preprocessing the GEFCom2014 data
+Next step is to preprocess the data with feature extraction relavent for the task at hand. This repo includes examples of feature extraction for the different GEFCom2014 tracks: 
 
+```
+preprocess/preprocess_gefcom2014_wind_example.py
+preprocess/preprocess_gefcom2014_solar_example.py
+preprocess/preprocess_gefcom2014_load_example.py
+```
 
+These preprocessing scripts takes input from the parameter files. As an example, run the preprocessing script for the wind track as: 
+
+```
+python preprocess/preprocess_gefcom2014_wind_example.py params/params_competition_gefcom2014_wind_example.json
+```
+
+the processed data file will be saved to: 
+
+```
+Wind track preprocessed data saved to: ./data/gefcom2014/preprocessed/gefcom2014-wind-preprocessed.csv
+```
 
 ## Tuning GBDT models
 Quick start receipt for training GBDT models:
