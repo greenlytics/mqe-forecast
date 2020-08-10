@@ -60,7 +60,6 @@ if __name__ == '__main__':
     with open(params_path, 'r', encoding='utf-8') as file:
         params_json = json.loads(file.read())
 
-    dataset = params_json['path_raw_data'].split('/')[-1][:-4]
     df = load_data(params_json['path_raw_data'], header=[0,1])
     df = preprocess_wind(df, params_json['target'], params_json['features'])
     df.to_csv(params_json['path_preprocessed_data'])
