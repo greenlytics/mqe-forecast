@@ -1,0 +1,91 @@
+{
+  "trial_name": "trial20",
+  "trial_comment": "Only using radiation VAR169.",
+  "path_result": "./result/gefcom2014/solar/competition/",
+  "path_raw_data": "./data/gefcom2014/raw/gefcom2014-solar-raw.csv",
+  "path_preprocessed_data": "./data/gefcom2014/preprocessed/gefcom2014-solar-preprocessed.csv",
+  "data_resolution": "60min",
+  "farm_coords": [[145, -37,5], [145, -37,5], [145, -37,5]],
+  "farm_altitude": [595, 602, 951],
+  "farm_capacity": [1, 1, 1],
+  "panel_orientation": [38, 327, 31],
+  "panel_tilt": [36, 35, 21],
+  "splits":
+    {
+    "train": [["2012-04-01 01:00:00", "2013-04-01 00:00:00"],
+              ["2012-04-01 01:00:00", "2013-05-01 00:00:00"]],
+    "test":  [["2013-04-01 01:00:00", "2013-05-01 00:00:00"],
+              ["2013-05-01 01:00:00", "2013-06-01 00:00:00"]]
+    },
+  "farms": ["1", "2", "3"],
+  "features": ["VAR134", "VAR157", "VAR164", "VAR165", "VAR166", "VAR167", "VAR169", "VAR175", "VAR178", "VAR228", "VAR78", "VAR79", "zenith", "azimuth", "ghi_clearsky", "dni_clearsky", "dhi_clearsky", "dni", "dhi", "Clearsky_Forecast"],
+  "variables_lags": 
+    {
+     "VAR169": [-3, -2, -1, 1, 2, 3]
+    },
+  "target": "POWER",
+  "diff_target_with_physical": false,
+  "target_smoothing_window": 1,
+  "train_on_day_only": true,
+  "regression_params":
+    {
+     "type": ["quantile"],
+     "alpha_range": [0.1, 1.0, 0.1],
+     "quantile_postprocess": "sorting",
+     "y_min_max": [null, null]
+    },
+  "model_params":
+    {"lightgbm":
+      {
+        "learning_rate": 0.1,
+        "num_trees": 20,
+        "boosting": "gbdt",
+        "max_leaves": 32,
+        "max_depth": 10,
+        "min_data_in_leaf": 20,
+        "max_bin": 30,
+        "bagging_fraction": 1,
+        "bagging_freq": 0,
+        "feature_fraction": 1,
+        "early_stopping": 5,
+        "lambda_l1": 0.0,
+        "lambda_l2": 0.0,
+        "verbose": -1
+      },
+      "xgboost":
+      {
+        "num_round": 20,         
+        "eta": 0.1,
+        "gamma": 0,
+        "max_depth": 10,
+        "verbosity": 0
+      },
+      "catboost":
+      {
+        "learning_rate": 0.1,
+        "num_trees": 20,
+        "verbose": false
+      },
+      "skboost":
+      {
+        "learning_rate": 0.1,
+        "n_estimators": 20,
+        "max_depth": 10,
+        "min_samples_leaf": 20,
+        "verbose": 0
+      }
+    },
+  "weight_params":
+    {
+     "weight_end": 1.0,
+     "weight_shape": 80
+    },
+  "save_options":
+    {
+     "data": true,
+     "prediction": true,
+     "model": false,
+     "loss": true,
+     "overall_score": true
+    }
+}
