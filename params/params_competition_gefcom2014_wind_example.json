@@ -3,7 +3,7 @@
   "trial_comment": "test",
   "path_result": "./result/gefcom2014/gefcom2014-wind/",
   "path_raw_data": "./data/gefcom2014/raw/gefcom2014-wind-raw.csv",
-  "path_preprocessed_data": "./data/gefcom2014/preprocessed/gefcom2014-wind-preprocessed.csv",
+  "path_preprocessed_data": "./data/gefcom2014/preprocessed/",
   "data_resolution": "60min",
   "splits":
    {"train": [["2012-01-01 01:00:00", "2012-10-01 00:00:00"],

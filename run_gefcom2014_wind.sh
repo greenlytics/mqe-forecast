@@ -1,13 +1,16 @@
 #!/bin/bash
 
 # Select params.json file
-PARMS="./params/params_competition_gefcom2014_wind0.json"
+PARMS="./params/params_competition_gefcom2014_wind_example.json"
 
 # Extract gefcom2014 data
 python ./preprocess/extract_gefcom2014_wind_solar_load.py
 
-# Preprocess data
-python ./preprocess/preprocess_gefcom2014_wind.py $PARMS
+# Preprocess gefcom2014 data
+python ./preprocess/preprocess_gefcom2014_wind_example.py $PARMS
 
-# train data
-python ./train.py $PARMS
+# Train model
+#python ./main.py $PARMS
+
+# Generate plots
+#TODO make a script that generates the results plots

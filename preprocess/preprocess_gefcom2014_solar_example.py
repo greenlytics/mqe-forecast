@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import os
 import sys
 import json
 import datetime
@@ -92,9 +93,11 @@ def preprocess_data(df, params_json):
     return df
 
 
-def save_data(path_data, df):
-
-    df.to_csv(path_data)
+def save_data(path, df):
+    
+    if not os.path.exists(path):
+        os.makedirs(path)
+    df.to_csv(path+'gefcom2014-solar-preprocessed.csv')
 
 
 if __name__ == '__main__':
@@ -105,3 +108,4 @@ if __name__ == '__main__':
     df = load_data(params_json['path_raw_data'], header=[0,1])
     df = preprocess_data(df, params_json)
     save_data(params_json['path_preprocessed_data'], df)
+    print('Solar track preprocessed data saved to: '+params_json['path_preprocessed_data'])

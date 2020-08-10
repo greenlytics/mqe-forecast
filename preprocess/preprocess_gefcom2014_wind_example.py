@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import os
 import sys
 import json
 import datetime
@@ -50,9 +51,11 @@ def preprocess_wind(df, target, features):
     return df_temp
 
 
-def save_data(path_data, df):
-
-    df.to_csv(path_data)
+def save_data(path, df):
+    
+    if not os.path.exists(path):
+        os.makedirs(path)
+    df.to_csv(path+'gefcom2014-wind-preprocessed.csv')
 
 
 if __name__ == '__main__':
@@ -62,6 +65,6 @@ if __name__ == '__main__':
 
     df = load_data(params_json['path_raw_data'], header=[0,1])
     df = preprocess_wind(df, params_json['target'], params_json['features'])
-    df.to_csv(params_json['path_preprocessed_data'])
+    save_data(params_json['path_preprocessed_data'], df)
     print('Wind track preprocessed data saved to: '+params_json['path_preprocessed_data'])
 

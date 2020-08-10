@@ -1,13 +1,17 @@
 # power-forecast
+
+## Introduction
 This code, `power-forecast`, is a method for energy forecasting using gradient boosting decision trees. It considers the problem of energy forecasting as a tabular problem without the  spatio-temporal aspects included in the modelling prior. Instead spatio-temporal features can be included as features in the tabular data. The code integrates four popular gradient boosting implementations: 
 
-##### 1) [`lightgbm`](https://lightgbm.readthedocs.io/en/latest/), [Link to paper](https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree.pdf)
-##### 2) [`xgboost`](https://xgboost.readthedocs.io/en/latest/), [Link to paper](https://arxiv.org/pdf/1603.02754.pdf)
-##### 3) [`catboost`](https://catboost.ai/), [Link to paper](https://arxiv.org/pdf/1706.09516.pdf)
+##### 1) [`lightgbm`](https://lightgbm.readthedocs.io/en/latest/) ([Link to paper](https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree.pdf))
+##### 2) [`xgboost`](https://xgboost.readthedocs.io/en/latest/) ([Link to paper](https://arxiv.org/pdf/1603.02754.pdf))
+##### 3) [`catboost`](https://catboost.ai/) ([Link to paper](https://arxiv.org/pdf/1706.09516.pdf))
 ##### 4) [`scikit-learn`](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.GradientBoostingRegressor.html#sklearn.ensemble.GradientBoostingRegressor)
 
-## Preparing the GEFCom2014 data
+## Results
+The code 
 
+## Preparing the GEFCom2014 data
 ### Download data
 Download the [GEFCom2014 data](https://drive.google.com/file/d/1gKSe-OMVICQ5ZcBD_jvtAPRuamTFwFqI/view?usp=sharing) and place the file `1-s2.0-S0169207016000133-mmc1.zip`in the `data` folder. 
 

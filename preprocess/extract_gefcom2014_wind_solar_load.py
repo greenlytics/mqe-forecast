@@ -1,3 +1,4 @@
+import os
 import zipfile
 import shutil
 import pandas as pd
@@ -41,7 +42,11 @@ def load_wind_track():
 
     df_task15 = pd.merge(df_target15, df_exp15, on='TIMESTAMP')
     df_tasks = pd.concat([df_task1_14, df_task15], axis=0)
-    df_tasks.to_csv('./data/gefcom2014/raw/gefcom2014-wind-raw.csv')
+    
+    path = './data/gefcom2014/raw/'
+    if not os.path.exists(path):
+        os.makedirs(path)
+    df_tasks.to_csv(path+'gefcom2014-wind-raw.csv')
     print('Wind track data saved to: ./data/raw/gefcom2014-wind-raw.csv.')
 
 def load_solar_track():
@@ -53,7 +58,11 @@ def load_solar_track():
     df = pd.read_csv('./data/gefcom2014/GEFCom2014 Data/Solar/Task 15/predictors15.csv', header=0, index_col=1, parse_dates=True)
     df = df.pivot_table(index='TIMESTAMP', columns=['ZONEID'], values=['POWER', 'VAR78', 'VAR79', 'VAR134', 'VAR157', 'VAR164', 'VAR165', 'VAR166', 'VAR167', 'VAR169', 'VAR175', 'VAR178', 'VAR228'], dropna=False)
     df.columns = df.columns.swaplevel(i=0, j=1)
-    df.to_csv('./data/gefcom2014/raw/gefcom2014-solar-raw.csv')
+
+    path = './data/gefcom2014/raw/'
+    if not os.path.exists(path):
+        os.makedirs(path)
+    df.to_csv(path+'gefcom2014-solar-raw.csv')
     print('Solar track data saved to: ./data/raw/gefcom2014-solar-raw.csv.')
 
 def load_load_track():
@@ -80,11 +89,15 @@ def load_load_track():
     df_task15 = df_task15.drop(columns=['date', 'hour'])
     df = pd.concat([df, df_task15])
 
-    df.to_csv('./data/gefcom2014/raw/gefcom2014-load-raw.csv')
+    path = './data/gefcom2014/raw/'
+    if not os.path.exists(path):
+        os.makedirs(path)
+    df.to_csv(path+'gefcom2014-load-raw.csv')
     print('Load track data saved to: ./data/raw/gefcom2014-load-raw.csv.')
 
 if __name__ == '__main__':
     extract_zip('./data/gefcom2014/1-s2.0-S0169207016000133-mmc1.zip')
+    shutil.move('./data/gefcom2014/GEFCom2014 Data/Provisional_Leaderboard_V2.xlsx', './data/gefcom2014/Provisional_Leaderboard_V2.xlsx')
     load_wind_track()
     load_solar_track()
     load_load_track()
