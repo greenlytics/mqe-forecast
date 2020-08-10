@@ -1,4 +1,10 @@
 # power-forecast
+This code, `power-forecast`, is a method for energy forecasting using gradient boosting decision trees. It considers the problem of energy forecasting as a tabular problem without the  spatio-temporal aspects included in the modelling prior. Instead spatio-temporal features can be included as features in the tabular data. The code integrates four popular gradient boosting implementations: 
+
+##### 1) [`lightgbm`](https://lightgbm.readthedocs.io/en/latest/)
+##### 2) [`xgboost`](https://xgboost.readthedocs.io/en/latest/)
+##### 3) [`catboost`](https://catboost.ai/)
+##### 4) [`scikit-learn`](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.GradientBoostingRegressor.html#sklearn.ensemble.GradientBoostingRegressor)
 
 ## Preparing the GEFCom2014 data
 
@@ -20,7 +26,6 @@ Solar track data saved to: ./data/raw/gefcom2014-solar-raw.csv
 Load track data saved to: ./data/raw/gefcom2014-load-raw.csv
 ```
 
-## Preprocessing the GEFCom2014 data
 ## Preprocessing the GEFCom2014 data
 Next step is to preprocess the data with feature extraction relavent for the task at hand. This repo includes examples of feature extraction for the different GEFCom2014 tracks: 
 

@@ -1,29 +1,7 @@
 # Parameters
-This page contains descriptions of all parameters in `site_forecast`.
+This page contains descriptions of all parameters in `power-forecast` as well as useful links and general advice on tuning GBDT models. 
 
-## Useful links
-Learning parameters for the supported gradient boosting implementations can be found here:
-
-#### [LightGBM](https://github.com/microsoft/LightGBM)
-
-* [Parameter documentation](https://lightgbm.readthedocs.io/en/latest/Parameters.html)
-* [Laurae++ Interactive Documentation](https://sites.google.com/view/lauraepp/parameters)
-
-More links: 
-[LightGBM, Official documentation on parameters](https://lightgbm.readthedocs.io/en/latest/Parameters.html)
-[LightGBM, Parameters tuning](https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html)
-[What is LightGBM, How to implement it? How to fine tune the parameters?](https://medium.com/@pushkarmandot/https-medium-com-pushkarmandot-what-is-lightgbm-how-to-implement-it-how-to-fine-tune-the-parameters-60347819b7fc)
-[Lauraepp, Parameters](https://sites.google.com/view/lauraepp/parameters?authuser=0)
-<br> Comparison between XGBoost and LightGBM parameters.
-
-#### [XGBoost](https://xgboost.readthedocs.io/en/latest/index.html)
-
-* [Parameter documentation](https://xgboost.readthedocs.io/en/latest/parameter.html)
-* [Laurae++ Interactive Documentation](https://sites.google.com/view/lauraepp/parameters)
-
-
-## `site_forecast` parameters
-
+## `power-forecast` parameters
 * `trial_name`: The name of the trial. Will be used to store the result.
 * `trial_comment`: Additional information about the trial.
 * `path_result`: Path to where the result will be stored.
@@ -62,3 +40,35 @@ More links:
   * `model`: Boolean if to save models to result.
   * `loss`: Boolean if to save loss to result.
   * `overall_score`: Boolean if to save overall score to result.
+
+## Advice on tuning GBDT models
+Quick start receipt for training GBDT models:
+##### 1) Set number of trees to something as high as possible (e.g. 3000)
+##### 2) Run a grid search or random search
+##### 3) Finally set number of trees even higher and tune learning rate
+
+The maximum depth of the tree controls the degree of feature interaction that you can model. Usually it is fair to assume that the degree if interactions is fairly low. As a rule of thumb the depth of the tree should be around 4-6 [1]
+
+Shrinkage (or learning rate) is a parameter that exponentially reduced the weight that a tree will have in the final prediction as more and more trees are added. As a general rule of thumb, a model with higher shrinkage (or low learning rate) and more trees will perform better than a model with low shrinkage and few trees. The learning rate should typically be less than 0.1.
+
+Stochastic gradient boosting is doing the same thing as random forest is doing. Either sampling data points or sampling feature set before creating a split point. This typically leads to improved accuracy.
+
+## Useful links
+Learning parameters for the supported gradient boosting implementations can be found here:
+
+#### [LightGBM](https://github.com/microsoft/LightGBM)
+
+* [Parameter documentation](https://lightgbm.readthedocs.io/en/latest/Parameters.html)
+* [Laurae++ Interactive Documentation](https://sites.google.com/view/lauraepp/parameters)
+
+More links: 
+[LightGBM, Official documentation on parameters](https://lightgbm.readthedocs.io/en/latest/Parameters.html)
+[LightGBM, Parameters tuning](https://lightgbm.readthedocs.io/en/latest/Parameters-Tuning.html)
+[What is LightGBM, How to implement it? How to fine tune the parameters?](https://medium.com/@pushkarmandot/https-medium-com-pushkarmandot-what-is-lightgbm-how-to-implement-it-how-to-fine-tune-the-parameters-60347819b7fc)
+[Lauraepp, Parameters](https://sites.google.com/view/lauraepp/parameters?authuser=0)
+<br> Comparison between XGBoost and LightGBM parameters.
+
+#### [XGBoost](https://xgboost.readthedocs.io/en/latest/index.html)
+
+* [Parameter documentation](https://xgboost.readthedocs.io/en/latest/parameter.html)
+* [Laurae++ Interactive Documentation](https://sites.google.com/view/lauraepp/parameters)
