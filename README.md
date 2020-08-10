@@ -1,9 +1,9 @@
 # power-forecast
 This code, `power-forecast`, is a method for energy forecasting using gradient boosting decision trees. It considers the problem of energy forecasting as a tabular problem without the  spatio-temporal aspects included in the modelling prior. Instead spatio-temporal features can be included as features in the tabular data. The code integrates four popular gradient boosting implementations: 
 
-##### 1) [`lightgbm`](https://lightgbm.readthedocs.io/en/latest/)
-##### 2) [`xgboost`](https://xgboost.readthedocs.io/en/latest/)
-##### 3) [`catboost`](https://catboost.ai/)
+##### 1) [`lightgbm`](https://lightgbm.readthedocs.io/en/latest/), [Link to paper](https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree.pdf)
+##### 2) [`xgboost`](https://xgboost.readthedocs.io/en/latest/), [Link to paper](https://arxiv.org/pdf/1603.02754.pdf)
+##### 3) [`catboost`](https://catboost.ai/), [Link to paper](https://arxiv.org/pdf/1706.09516.pdf)
 ##### 4) [`scikit-learn`](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.GradientBoostingRegressor.html#sklearn.ensemble.GradientBoostingRegressor)
 
 ## Preparing the GEFCom2014 data
@@ -47,18 +47,6 @@ the processed data file will be saved to:
 Wind track preprocessed data saved to: ./data/gefcom2014/preprocessed/gefcom2014-wind-preprocessed.csv
 ```
 
-## Tuning GBDT models
-Quick start receipt for training GBDT models:
-##### 1) Set number of trees to something as high as possible (e.g. 3000)
-##### 2) Run a grid search or random search
-##### 3) Finally set number of trees even higher and tune learning rate
-
-The maximum depth of the tree controls the degree of feature interaction that you can model. Usually it is fair to assume that the degree if interactions is fairly low. As a rule of thumb the depth of the tree should be around 4-6 [1]
-
-Shrinkage (or learning rate) is a parameter that exponentially reduced the weight that a tree will have in the final prediction as more and more trees are added. As a general rule of thumb, a model with higher shrinkage (or low learning rate) and more trees will perform better than a model with low shrinkage and few trees. The learning rate should typically be less than 0.1.
-
-Stochastic gradient boosting is doing the same thing as random forest is doing. Either sampling data points or sampling feature set before creating a split point. This typically leads to improved accuracy.
-## Model pipeline
 
 
 ## References
