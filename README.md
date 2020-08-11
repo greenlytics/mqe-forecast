@@ -9,6 +9,9 @@ This code, `power-forecast`, is a method for energy forecasting using gradient b
 ##### 4) [`scikit-learn`](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.GradientBoostingRegressor.html#sklearn.ensemble.GradientBoostingRegressor)
 
 ## Results
+* Comparison with winners of the GEFCOM2014 competition
+* Solar power forecast and comparison with physical. 
+* Sensitivity analysis of adding more data
 The code 
 
 ## Preparing the GEFCom2014 data

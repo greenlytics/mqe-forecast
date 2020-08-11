@@ -519,7 +519,7 @@ class Trial:
                     for farm in range(len(result_loss[key][model])):
                         for split in range(len(result_loss[key][model][0])):
                             file_name_loss = key+'_'+model+'site_{0}_split_{1}.csv'.format(farm, split)
-                            result_loss[key][model][farm][split].to_csv(trial_path+'/'+key+'/'+file_name_loss)
+                            result_loss[key][model][farm][split].to_csv(trial_path+'/'+key+'/'+file_name_loss, header=True)
         if self.save_options['overall_score'] == True:
             score_train_model = self.calculate_score(result_loss['dfs_loss_train_farm'])
             score_valid_model = self.calculate_score(result_loss['dfs_loss_valid_farm'])
@@ -568,5 +568,5 @@ if __name__ == '__main__':
     with open(params_path, 'r', encoding='utf-8') as file:
         params_json = json.loads(file.read())
 
-    df = load_data(params_json['path_preprocessed_data'])
+    df = load_data(params_json['path_preprocessed_data']+params_json['filename_preprocessed_data'])
     main(df, params_json)

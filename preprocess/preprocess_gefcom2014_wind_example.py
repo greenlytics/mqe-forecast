@@ -8,9 +8,9 @@ import numpy as np
 import pandas as pd
 
 
-def load_data(path_data, header=0):
+def load_data(path, header=0):
 
-    df = pd.read_csv(path_data, header=header, index_col=0, parse_dates=True)
+    df = pd.read_csv(path+'gefcom2014-wind-raw.csv', header=header, index_col=0, parse_dates=True)
 
     return df
 

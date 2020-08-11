@@ -4,13 +4,13 @@
 PARMS="./params/params_competition_gefcom2014_wind_example.json"
 
 # Extract gefcom2014 data
-python ./preprocess/extract_gefcom2014_wind_solar_load.py
+python -W ignore ./preprocess/extract_gefcom2014_wind_solar_load.py wind
 
 # Preprocess gefcom2014 data
-python ./preprocess/preprocess_gefcom2014_wind_example.py $PARMS
+python -W ignore ./preprocess/preprocess_gefcom2014_wind_example.py $PARMS
 
 # Train model
-#python ./main.py $PARMS
+python -W ignore ./main.py $PARMS
 
 # Generate plots
 #TODO make a script that generates the results plots

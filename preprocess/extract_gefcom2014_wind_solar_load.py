@@ -1,3 +1,4 @@
+import sys
 import os
 import zipfile
 import shutil
@@ -98,7 +99,10 @@ def load_load_track():
 if __name__ == '__main__':
     extract_zip('./data/gefcom2014/1-s2.0-S0169207016000133-mmc1.zip')
     shutil.move('./data/gefcom2014/GEFCom2014 Data/Provisional_Leaderboard_V2.xlsx', './data/gefcom2014/Provisional_Leaderboard_V2.xlsx')
-    load_wind_track()
-    load_solar_track()
-    load_load_track()
+    if 'wind' in sys.argv[0:]: 
+        load_wind_track()
+    if 'solar' in sys.argv[0:]: 
+        load_solar_track()
+    if 'load' in sys.argv[0:]: 
+        load_load_track()
     shutil.rmtree('./data/gefcom2014/GEFCom2014 Data')
