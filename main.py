@@ -36,7 +36,7 @@ class Trial:
         self.path_preprocessed_data = params_json['path_preprocessed_data']
         self.data_resolution = params_json['data_resolution']
         self.splits = params_json['splits']
-        self.farms = params_json['farms']
+        self.sites = params_json['sites']
         self.features = params_json['features']
         self.target = params_json['target']
         self.model_params = params_json['model_params']
@@ -64,7 +64,7 @@ class Trial:
             self.weight_params = params_json['weight_params']
 
 
-    def generate_dataset(self, df, split, farm): 
+    def generate_dataset(self, df, split, site): 
 
         def add_lags(df, variables_lags): 
             # Lagged features
@@ -78,11 +78,11 @@ class Trial:
         self.target = [self.target] if isinstance(self.target, str) else self.target
 
         if self.diff_target_with_physical and not (['Physical_Forecast'] in self.features):
-            df_X = df[farm].loc[pd.IndexSlice[:, split[0]:split[1]], self.features+['Physical_Forecast']]
+            df_X = df[site].loc[pd.IndexSlice[:, split[0]:split[1]], self.features+['Physical_Forecast']]
         else:
-            df_X = df[farm].loc[pd.IndexSlice[:, split[0]:split[1]], self.features]
+            df_X = df[site].loc[pd.IndexSlice[:, split[0]:split[1]], self.features]
 
-        df_y = df[farm].loc[pd.IndexSlice[:, split[0]:split[1]], self.target]
+        df_y = df[site].loc[pd.IndexSlice[:, split[0]:split[1]], self.target]
 
         # Add lagged variables
         if self.variables_lags is not None: 
@@ -117,17 +117,17 @@ class Trial:
         return df_X, df_y, df_model, weight
 
 
-    def generate_dataset_farm_split(self, df, split_set='train'):
+    def generate_dataset_site_split(self, df, split_set='train'):
         # Generate train and valid splits
 
-        dfs_X_farm, dfs_y_farm, dfs_model_farm, weight_farm = [], [], [], []
+        dfs_X_site, dfs_y_site, dfs_model_site, weight_site = [], [], [], []
         print('Generating dataset...')
-        with tqdm(total=len(self.farms)*len(self.splits[split_set])) as pbar:
-            for farm in self.farms:
+        with tqdm(total=len(self.sites)*len(self.splits[split_set])) as pbar:
+            for site in self.sites:
 
                 dfs_X_split, dfs_y_split, dfs_model_split, weight_split = [], [], [], []
                 for split in self.splits[split_set]:
-                    df_X, df_y, df_model, weight = self.generate_dataset(df, split, farm)
+                    df_X, df_y, df_model, weight = self.generate_dataset(df, split, site)
 
                     dfs_X_split.append(df_X)
                     dfs_y_split.append(df_y)
@@ -136,12 +136,12 @@ class Trial:
 
                     pbar.update(1)
 
-                dfs_X_farm.append(dfs_X_split)
-                dfs_y_farm.append(dfs_y_split)
-                dfs_model_farm.append(dfs_model_split)
-                weight_farm.append(weight_split)
+                dfs_X_site.append(dfs_X_split)
+                dfs_y_site.append(dfs_y_split)
+                dfs_model_site.append(dfs_model_split)
+                weight_site.append(weight_split)
 
-        return dfs_X_farm, dfs_y_farm, dfs_model_farm, weight_farm
+        return dfs_X_site, dfs_y_site, dfs_model_site, weight_site
 
     def build_model_dataset(self, df_model_train, df_model_valid=None, weight=None): 
         # Build up dataset adapted to models
@@ -257,23 +257,23 @@ class Trial:
 
         return gbm_q, evals_result_q
 
-    def train_farm_split(self, dfs_model_train_farm, weight_train_farm=None, dfs_model_valid_farm=None):
+    def train_site_split(self, dfs_model_train_site, weight_train_site=None, dfs_model_valid_site=None):
         
-        gbm_farm, evals_result_farm = [], []
+        gbm_site, evals_result_site = [], []
         print('Training...')
-        with tqdm(total=len(dfs_model_train_farm)*len(dfs_model_train_farm[0])) as pbar:
-            for idx_farm, dfs_model_train_split in enumerate(dfs_model_train_farm):
+        with tqdm(total=len(dfs_model_train_site)*len(dfs_model_train_site[0])) as pbar:
+            for idx_site, dfs_model_train_split in enumerate(dfs_model_train_site):
 
                 gbm_split, evals_result_split = [], []
                 for idx_split, df_model_train in enumerate(dfs_model_train_split):
                     
-                    if weight_train_farm is not None: 
-                        weight = weight_train_farm[idx_farm][idx_split]
+                    if weight_train_site is not None: 
+                        weight = weight_train_site[idx_site][idx_split]
                     else:
                         weight = None
                         
-                    if dfs_model_valid_farm is not None: 
-                        df_model_valid = dfs_model_valid_farm[idx_farm][idx_split]
+                    if dfs_model_valid_site is not None: 
+                        df_model_valid = dfs_model_valid_site[idx_site][idx_split]
                     else:
                         df_model_valid = None
 
@@ -285,10 +285,10 @@ class Trial:
                     
                     pbar.update(1)
 
-                gbm_farm.append(gbm_split)
-                evals_result_farm.append(evals_result_split)
+                gbm_site.append(gbm_split)
+                evals_result_site.append(evals_result_split)
 
-        return gbm_farm, evals_result_farm
+        return gbm_site, evals_result_site
         
 
     def predict(self, df_X, gbm_q): 
@@ -299,18 +299,18 @@ class Trial:
             if self.diff_target_with_physical: 
                 y_pred = y_pred+df_X['Physical_Forecast'].values
             
-            if not self.regression_params['y_min_max'] == [None, None]: 
-                y_min_max = self.regression_params['y_min_max']
+            if not self.regression_params['target_min_max'] == [None, None]: 
+                target_min_max = self.regression_params['target_min_max']
 
-                if y_min_max[1] == 'clearsky': 
+                if target_min_max[1] == 'clearsky': 
                     idx_clearsky = y_pred > df_X['Clearsky_Forecast'].values
                     y_pred[idx_clearsky] = df_X['Clearsky_Forecast'].values[idx_clearsky]
                     
-                    if not y_min_max[0] == None:
-                        y_pred = y_pred.clip(min=y_min_max[0], max=None)
+                    if not target_min_max[0] == None:
+                        y_pred = y_pred.clip(min=target_min_max[0], max=None)
 
                 else:
-                    y_pred = y_pred.clip(min=y_min_max[0], max=y_min_max[1])
+                    y_pred = y_pred.clip(min=target_min_max[0], max=target_min_max[1])
 
             return y_pred
 
@@ -382,13 +382,13 @@ class Trial:
 
         return df_y_pred_qs
 
-    def predict_farm_split(self, dfs_X_farm, gbm_farm):
+    def predict_site_split(self, dfs_X_site, gbm_site):
         # Use trained models to predict for their corresponding split
 
-        dfs_y_pred_farm = []
+        dfs_y_pred_site = []
         print('Predicting...')
-        with tqdm(total=len(dfs_X_farm)*len(dfs_X_farm[0])) as pbar:
-            for dfs_X_split, gbm_split, in zip(dfs_X_farm, gbm_farm):
+        with tqdm(total=len(dfs_X_site)*len(dfs_X_site[0])) as pbar:
+            for dfs_X_split, gbm_split, in zip(dfs_X_site, gbm_site):
 
                 dfs_y_pred_split = []
                 for dfs_X, gbm_q in zip(dfs_X_split, gbm_split):
@@ -398,32 +398,35 @@ class Trial:
 
                     pbar.update(1)
 
-                dfs_y_pred_farm.append(dfs_y_pred_split)
+                dfs_y_pred_site.append(dfs_y_pred_split)
 
-        return dfs_y_pred_farm
+        return dfs_y_pred_site
 
 
-    def calculate_loss(self, dfs_y_true_farm, dfs_y_pred_farm):
+    def calculate_loss(self, dfs_y_true_site, dfs_y_pred_site):
 
         print('Calculating loss...')
         if 'mean' in self.regression_params['type']:
 
             dfs_loss_model = {}
             for model in self.model_params.keys():
-                dfs_loss_farm = []
-                for dfs_y_true_split, dfs_y_pred_split in zip(dfs_y_true_farm, dfs_y_pred_farm):
+                dfs_loss_site = []
+                for dfs_y_true_split, dfs_y_pred_split in zip(dfs_y_true_site, dfs_y_pred_site):
                     dfs_loss_split = []
                     for dfs_y_true, dfs_y_pred in zip(dfs_y_true_split, dfs_y_pred_split):
+                        y_true = dfs_y_true[self.target].values
+                        df_pred = dfs_y_pred[model]
+                        y_pred = dfs_y_pred[model].values
 
-                        df_y_true = dfs_y_true[self.target].squeeze()
-                        df_y_pred = dfs_y_pred[model].squeeze()
-                        df_loss = (df_y_pred-df_y_true)**2
+                        loss = (df_y_pred-df_y_true)**2
 
+                        df_loss = pd.DataFrame(data=loss, index=df_pred.index, columns=df_pred.columns)
+                        
                         dfs_loss_split.append(df_loss)
 
-                    dfs_loss_farm.append(dfs_loss_split)
+                    dfs_loss_site.append(dfs_loss_split)
 
-                dfs_loss_model[model] = dfs_loss_farm
+                dfs_loss_model[model] = dfs_loss_site
 
         if 'quantile' in self.regression_params['type']:
             # Evaluation using pinball loss function
@@ -433,15 +436,16 @@ class Trial:
                                 self.regression_params['alpha_range'][2])
             a = alpha_q.reshape(1,-1)
 
-            loss_model = {}
+            dfs_loss_model = {}
             for model in self.model_params.keys():
 
-                loss_farm = []
-                for dfs_y_true_split, dfs_y_pred_split in zip(dfs_y_true_farm, dfs_y_pred_farm):
-                    loss_split = []
+                dfs_loss_site = []
+                for dfs_y_true_split, dfs_y_pred_split in zip(dfs_y_true_site, dfs_y_pred_site):
+                    dfs_loss_split = []
                     for df_y_true, df_y_pred in zip(dfs_y_true_split, dfs_y_pred_split):
                         y_true = df_y_true[self.target].values
-                        y_pred = df_y_pred[model].values
+                        df_pred = df_y_pred[model]
+                        y_pred = df_pred.values
 
                         # Pinball loss with nan if true label is nan
                         with np.errstate(invalid='ignore'):
@@ -451,11 +455,13 @@ class Trial:
                                                     (1-a)*(y_pred-y_true),
                                                     a*(y_true-y_pred)))
 
-                        loss_split.append(loss)
+                            df_loss = pd.DataFrame(data=loss, index=df_pred.index, columns=df_pred.columns)
 
-                    loss_farm.append(loss_split)
+                        dfs_loss_split.append(df_loss)
 
-                loss_model[model] = np.array(loss_farm)
+                    dfs_loss_site.append(dfs_loss_split)
+
+                dfs_loss_model[model] = dfs_loss_site
         
         return dfs_loss_model
 
@@ -465,7 +471,7 @@ class Trial:
         flatten = lambda l: [item for sublist in l for item in sublist]
         score_model = {}
         for model in self.model_params.keys():
-            score_model[model] = pd.concat(flatten(dfs_loss_model[model])).mean()
+            score_model[model] = pd.concat(flatten(dfs_loss_model[model])).mean().mean()
 
         return score_model
 
@@ -486,43 +492,47 @@ class Trial:
         if self.save_options['data'] == True:
             for key in result_data.keys():
                 os.makedirs(trial_path+'/'+key)
-                for farm in range(len(result_data[key])):
+                for site in range(len(result_data[key])):
                     for split in range(len(result_data[key][0])):
-                        file_name_result = key+'site_{0}_split_{1}.csv'.format(farm, split)
-                        result_data[key][farm][split].to_csv(trial_path+'/'+key+'/'+file_name_result)
+                        file_name_result = key+'_site_{0}_split_{1}.csv'.format(site, split)
+                        result_data[key][site][split].to_csv(trial_path+'/'+key+'/'+file_name_result)
         if self.save_options['prediction'] == True:
             for key in result_prediction.keys():
                 os.makedirs(trial_path+'/'+key)
-                for farm in range(len(result_prediction[key])):
+                for site in range(len(result_prediction[key])):
                     for split in range(len(result_prediction[key][0])):
                         for model in self.model_params.keys():
-                            file_name_result = key+'_'+model+'site_{0}_split_{1}.csv'.format(farm, split)
-                            result_prediction[key][farm][split][model].to_csv(trial_path+'/'+key+'/'+file_name_result)
+                            file_name_result = key+'_'+model+'_site_{0}_split_{1}.csv'.format(site, split)
+                            result_prediction[key][site][split][model].to_csv(trial_path+'/'+key+'/'+file_name_result)
         if self.save_options['model'] == True:
             for key in result_model.keys():
                 os.makedirs(trial_path+'/'+key)
-                for farm in range(len(result_model[key])):
+                for site in range(len(result_model[key])):
                     for split in range(len(result_model[key][0])):
                         for q in result_model[key][0][0].keys():
                             for model in self.model_params.keys():
                                 if model in ['lightgbm', 'xgboost', 'catboost']: 
-                                    file_name_result = key+'_'+model+'_'+str(q)+'site_{0}_split_{1}.txt'.format(farm, split)
-                                    result_model[key][farm][split][q][model].save_model(trial_path+'/'+key+'/'+file_name_result)
+                                    file_name_result = key+'_'+model+'_'+str(q)+'_site_{0}_split_{1}.txt'.format(site, split)
+                                    result_model[key][site][split][q][model].save_model(trial_path+'/'+key+'/'+file_name_result)
                                 if model == 'skboost': 
-                                    file_name_result = key+'_'+model+'_q_'+str(q)+'site_{0}_split_{1}.pkl'.format(farm, split)
+                                    file_name_result = key+'_'+model+'_q_'+str(q)+'_site_{0}_split_{1}.pkl'.format(site, split)
                                     with open(trial_path+'/'+key+'/'+file_name_result, 'wb') as f:
-                                        pickle.dump(result_model[key][farm][split][q][model], f)
+                                        pickle.dump(result_model[key][site][split][q][model], f)
         if self.save_options['loss'] == True:
             for key in result_loss.keys():
                 os.makedirs(trial_path+'/'+key)
                 for model in self.model_params.keys():
-                    for farm in range(len(result_loss[key][model])):
-                        for split in range(len(result_loss[key][model][0])):
-                            file_name_loss = key+'_'+model+'site_{0}_split_{1}.csv'.format(farm, split)
-                            result_loss[key][model][farm][split].to_csv(trial_path+'/'+key+'/'+file_name_loss, header=True)
+                    # Need to flip list to concatenate on sites
+                    #TODO change order of list when creating them instead
+                    dfs_loss_site = result_loss[key][model]
+                    dfs_loss_split = list(map(list, zip(*dfs_loss_site)))
+                    for split in range(len(dfs_loss_split)):
+                        file_name_loss = key+'_'+model+'_split_{0}.csv'.format(split)
+                        df_loss = pd.concat(dfs_loss_split[split], axis=1, keys=self.sites)
+                        df_loss.to_csv(trial_path+'/'+key+'/'+file_name_loss, header=True)
         if self.save_options['overall_score'] == True:
-            score_train_model = self.calculate_score(result_loss['dfs_loss_train_farm'])
-            score_valid_model = self.calculate_score(result_loss['dfs_loss_valid_farm'])
+            score_train_model = self.calculate_score(result_loss['dfs_loss_train_site'])
+            score_valid_model = self.calculate_score(result_loss['dfs_loss_valid_site'])
             file_name_score = self.path_result+'/trial-scores.txt'
 
             for model in score_train_model.keys():
@@ -539,27 +549,27 @@ class Trial:
 def main(df, params_json):
     trial = Trial(params_json)
 
-    dfs_X_train_farm, dfs_y_train_farm, dfs_model_train_farm, weight_train_farm = trial.generate_dataset_farm_split(df, split_set='train')
-    dfs_X_valid_farm, dfs_y_valid_farm, dfs_model_valid_farm, weight_valid_farm = trial.generate_dataset_farm_split(df, split_set='valid')
+    dfs_X_train_site, dfs_y_train_site, dfs_model_train_site, weight_train_site = trial.generate_dataset_site_split(df, split_set='train')
+    dfs_X_valid_site, dfs_y_valid_site, dfs_model_valid_site, weight_valid_site = trial.generate_dataset_site_split(df, split_set='valid')
     
-    gbm_farm, evals_result_farm = trial.train_farm_split(dfs_model_train_farm, weight_train_farm=weight_train_farm, dfs_model_valid_farm=dfs_model_valid_farm)
+    gbm_site, evals_result_site = trial.train_site_split(dfs_model_train_site, weight_train_site=weight_train_site, dfs_model_valid_site=dfs_model_valid_site)
     
-    dfs_y_pred_train_farm = trial.predict_farm_split(dfs_X_train_farm, gbm_farm)
-    dfs_y_pred_valid_farm = trial.predict_farm_split(dfs_X_valid_farm, gbm_farm)
+    dfs_y_pred_train_site = trial.predict_site_split(dfs_X_train_site, gbm_site)
+    dfs_y_pred_valid_site = trial.predict_site_split(dfs_X_valid_site, gbm_site)
     
-    dfs_loss_train_farm = trial.calculate_loss(dfs_y_train_farm, dfs_y_pred_train_farm)
-    dfs_loss_valid_farm = trial.calculate_loss(dfs_y_valid_farm, dfs_y_pred_valid_farm)
+    dfs_loss_train_site = trial.calculate_loss(dfs_y_train_site, dfs_y_pred_train_site)
+    dfs_loss_valid_site = trial.calculate_loss(dfs_y_valid_site, dfs_y_pred_valid_site)
 
-    result_data = {'dfs_X_train_farm': dfs_X_train_farm,
-                   'dfs_X_valid_farm': dfs_X_valid_farm,
-                   'dfs_y_train_farm': dfs_y_train_farm,
-                   'dfs_y_valid_farm': dfs_y_valid_farm}
-    result_prediction = {'dfs_y_pred_train_farm': dfs_y_pred_train_farm,
-                         'dfs_y_pred_valid_farm': dfs_y_pred_valid_farm}
-    result_model = {'gbms': gbm_farm}
-    result_evals = {'evals_result_farm': evals_result_farm}
-    result_loss = {'dfs_loss_train_farm': dfs_loss_train_farm,
-                   'dfs_loss_valid_farm': dfs_loss_valid_farm}
+    result_data = {'dfs_X_train_site': dfs_X_train_site,
+                   'dfs_X_valid_site': dfs_X_valid_site,
+                   'dfs_y_train_site': dfs_y_train_site,
+                   'dfs_y_valid_site': dfs_y_valid_site}
+    result_prediction = {'dfs_y_pred_train_site': dfs_y_pred_train_site,
+                         'dfs_y_pred_valid_site': dfs_y_pred_valid_site}
+    result_model = {'gbms': gbm_site}
+    result_evals = {'evals_result_site': evals_result_site}
+    result_loss = {'dfs_loss_train_site': dfs_loss_train_site,
+                   'dfs_loss_valid_site': dfs_loss_valid_site}
 
     trial.save_result(params_json, result_data, result_prediction, result_model, result_evals, result_loss)
 
