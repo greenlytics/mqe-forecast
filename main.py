@@ -75,14 +75,12 @@ class Trial:
             return df
 
         # Make target into list if not already
-        self.target = [self.target] if isinstance(self.target, str) else self.target
-
-        if self.diff_target_with_physical and not (['Physical_Forecast'] in self.features):
+        if self.diff_target_with_physical and not ('Physical_Forecast' in self.features):
             df_X = df[site].loc[pd.IndexSlice[:, split[0]:split[1]], self.features+['Physical_Forecast']]
         else:
             df_X = df[site].loc[pd.IndexSlice[:, split[0]:split[1]], self.features]
 
-        df_y = df[site].loc[pd.IndexSlice[:, split[0]:split[1]], self.target]
+        df_y = df[site].loc[pd.IndexSlice[:, split[0]:split[1]], [self.target]]
 
         # Add lagged variables
         if self.variables_lags is not None: 
@@ -147,28 +145,28 @@ class Trial:
         # Build up dataset adapted to models
         train_set, valid_sets = {}, {}
         if model == 'lightgbm':
-            train_set = lgb.Dataset(df_model_train[self.features], label=df_model_train[self.target], weight=weight, params={'verbose': -1}, free_raw_data=False)
+            train_set = lgb.Dataset(df_model_train[self.features], label=df_model_train[[self.target]], weight=weight, params={'verbose': -1}, free_raw_data=False)
             if df_model_valid is not None: 
-                valid_set = lgb.Dataset(df_model_valid[self.features], label=df_model_valid[self.target], params={'verbose': -1}, free_raw_data=False)
+                valid_set = lgb.Dataset(df_model_valid[self.features], label=df_model_valid[[self.target]], params={'verbose': -1}, free_raw_data=False)
                 valid_sets = [train_set, valid_set]
             else:
                 vaild_sets['lightgbm'] = [train_set_lgb]        
         elif model == 'xgboost':
-            train_set = xgb.DMatrix(df_model_train[self.features], label=df_model_train[self.target], weight=weight)
+            train_set = xgb.DMatrix(df_model_train[self.features], label=df_model_train[[self.target]], weight=weight)
             if df_model_valid is not None: 
-                valid_set = xgb.DMatrix(df_model_valid[self.features], label=df_model_valid[self.target])
+                valid_set = xgb.DMatrix(df_model_valid[self.features], label=df_model_valid[[self.target]])
                 valid_sets = [(train_set, 'train'), (valid_set, 'valid')]
             else: 
                 valid_sets = [(train_set, 'train')]   
         elif model == 'catboost':
-            train_set = cb.Pool(df_model_train[self.features], label=df_model_train[self.target], weight=weight)
+            train_set = cb.Pool(df_model_train[self.features], label=df_model_train[[self.target]], weight=weight)
             if df_model_valid is not None: 
-                valid_set = cb.Pool(df_model_valid[self.features], label=df_model_valid[self.target])
+                valid_set = cb.Pool(df_model_valid[self.features], label=df_model_valid[[self.target]])
                 valid_sets = [train_set, valid_set]      
             else: 
                 valid_sets = [valid_set]
         elif model == 'skboost' in self.model_params:
-            train_set = [df_model_train[self.features], df_model_train[self.target].squeeze(), weight]
+            train_set = [df_model_train[self.features], df_model_train[self.target], weight]
 
         return train_set, valid_sets
 
@@ -357,29 +355,29 @@ class Trial:
             y_pred = post_process(y_pred)
             y_pred_q.append(y_pred)
 
-            # Convert list to numpy 2D-array
-            y_pred_q = np.stack(y_pred_q, axis=-1)
+        # Convert list to numpy 2D-array
+        y_pred_q = np.stack(y_pred_q, axis=-1)
 
-            if 'quantile_postprocess' in self.regression_params.keys():
-                if self.regression_params['quantile_postprocess'] == 'none':
-                    pass
-                elif self.regression_params['quantile_postprocess'] == 'sorting': 
-                    # Lazy post-sorting of quantiles
-                    y_pred_q = np.sort(y_pred_q, axis=-1)
-                elif self.regression_params['quantile_postprocess'] == 'isotonic_regression': 
-                    # Isotonic regression
-                    regressor = IsotonicRegression()
-                    y_pred_q = np.stack([regressor.fit_transform(alpha_q, y_pred_q[sample,:]) for sample in range(idx_q_start, y_pred_q.shape[0])])                    
+        if 'quantile_postprocess' in self.regression_params.keys():
+            if self.regression_params['quantile_postprocess'] == 'none':
+                pass
+            elif self.regression_params['quantile_postprocess'] == 'sorting': 
+                # Lazy post-sorting of quantiles
+                y_pred_q = np.sort(y_pred_q, axis=-1)
+            elif self.regression_params['quantile_postprocess'] == 'isotonic_regression': 
+                # Isotonic regression
+                regressor = IsotonicRegression()
+                y_pred_q = np.stack([regressor.fit_transform(alpha_q, y_pred_q[sample,:]) for sample in range(idx_q_start, y_pred_q.shape[0])])                    
 
-            # Create prediction output dataframe
-            df_y_pred_q = df_index
-            if self.train_on_day_only:
-                df_y_pred_q[idx_day] = y_pred_q
-                df_y_pred_q[idx_night] = 0
-            else:
-                df_y_pred_q.values[:] = y_pred_q
+        # Create prediction output dataframe
+        df_y_pred_q = df_index
+        if self.train_on_day_only:
+            df_y_pred_q[idx_day] = y_pred_q
+            df_y_pred_q[idx_night] = 0
+        else:
+            df_y_pred_q.values[:] = y_pred_q
 
-            df_y_pred_q = df_y_pred_q.astype('float64')
+        df_y_pred_q = df_y_pred_q.astype('float64')
 
         return df_y_pred_q
 
@@ -449,7 +447,7 @@ class Trial:
                 for dfs_y_true_site, dfs_y_pred_site in zip(dfs_y_true_split, dfs_y_pred_split):
                     dfs_loss_site = []
                     for df_y_true, df_y_pred in zip(dfs_y_true_site, dfs_y_pred_site):
-                        y_true = df_y_true[self.target].values
+                        y_true = df_y_true[[self.target]].values
                         y_pred = df_y_pred.values
 
                         # Pinball loss with nan if true label is nan
@@ -516,35 +514,31 @@ class Trial:
                         for site in range(len(result_model[key][model][0])):
                             for q in result_model[key][model][0][0].keys():
                                 if model in ['lightgbm', 'xgboost', 'catboost']: 
-                                    file_name_result = key+'_'+model+'_'+str(q)+'_split_{0}_site_{1}.txt'.format(split, site)
-                                    result_model[key][model][split][site][q].save_model(trial_path+'/'+key+'/'+file_name_result)
+                                    file_name = key+'_'+model+'_'+str(q)+'_split_{0}_site_{1}.txt'.format(split, site)
+                                    result_model[key][model][split][site][q].save_model(trial_path+'/'+key+'/'+file_name)
                                 if model == 'skboost': 
-                                    file_name_result = key+'_'+model+'_q_'+str(q)+'_split_{0}_site_{1}.pkl'.format(split, site)
-                                    with open(trial_path+'/'+key+'/'+file_name_result, 'wb') as f:
+                                    file_name = key+'_'+model+'_q_'+str(q)+'_split_{0}_site_{1}.pkl'.format(split, site)
+                                    with open(trial_path+'/'+key+'/'+file_name, 'wb') as f:
                                         pickle.dump(result_model[key][model][split][site][q], f)
         if self.save_options['loss'] == True:
             for key in result_loss.keys():
                 os.makedirs(trial_path+'/'+key)
                 for model in self.model_params.keys():
-                    # Need to flip list to concatenate on sites
-                    #TODO change order of list when creating them instead
-                    dfs_loss_site = result_loss[key][model]
-                    dfs_loss_split = list(map(list, zip(*dfs_loss_site)))
-                    for split in range(len(dfs_loss_split)):
-                        file_name_loss = key+'_'+model+'_split_{0}.csv'.format(split)
-                        df_loss = pd.concat(dfs_loss_split[split], axis=1, keys=self.sites)
-                        df_loss.to_csv(trial_path+'/'+key+'/'+file_name_loss, header=True)
+                    for split in range(len(result_loss[key][model])):      
+                        file_name = key+'_'+model+'_split_{0}.csv'.format(split)
+                        df_loss = pd.concat(result_loss[key][model][split], axis=1, keys=self.sites)
+                        df_loss.to_csv(trial_path+'/'+key+'/'+file_name)
         if self.save_options['overall_score'] == True:
             score_train_model = self.calculate_score(result_loss['dfs_loss_train_model'])
             score_valid_model = self.calculate_score(result_loss['dfs_loss_valid_model'])
-            file_name_score = self.path_result+'/trial-scores.txt'
+            file_name = self.path_result+'/trial-scores.txt'
 
             for model in score_train_model.keys():
-                if not os.path.exists(file_name_score):
-                    with open(file_name_score, 'w') as file:
+                if not os.path.exists(file_name):
+                    with open(file_name, 'w') as file:
                         file.write('Name: {0}; Comment: {1}; Model: {2}; Train score {3}; valid score {4};\n'.format(self.trial_name, self.trial_comment, model, score_train_model[model], score_valid_model[model]))
                 else:
-                    with open(file_name_score, 'a') as file:
+                    with open(file_name, 'a') as file:
                         file.write('Name: {0}; Comment: {1}; Model: {2}; Train score {3}; valid score {4};\n'.format(self.trial_name, self.trial_comment, model, score_train_model[model], score_valid_model[model]))
 
         print('Results saved to: '+trial_path)

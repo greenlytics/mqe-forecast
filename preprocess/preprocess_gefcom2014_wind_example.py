@@ -8,9 +8,9 @@ import numpy as np
 import pandas as pd
 
 
-def load_data(path, header=0):
+def load_data(path, filename, header=0):
 
-    df = pd.read_csv(path+'gefcom2014-wind-raw.csv', header=header, index_col=0, parse_dates=True)
+    df = pd.read_csv(path+filename, header=header, index_col=0, parse_dates=True)
 
     return df
 
@@ -51,11 +51,11 @@ def preprocess_wind(df, target, features):
     return df_temp
 
 
-def save_data(path, df):
+def save_data(path, filename, df):
     
     if not os.path.exists(path):
         os.makedirs(path)
-    df.to_csv(path+'gefcom2014-wind-preprocessed.csv')
+    df.to_csv(path+filename)
 
 
 if __name__ == '__main__':
@@ -63,8 +63,8 @@ if __name__ == '__main__':
     with open(params_path, 'r', encoding='utf-8') as file:
         params_json = json.loads(file.read())
 
-    df = load_data(params_json['path_raw_data'], header=[0,1])
+    df = load_data(params_json['path_raw_data'], params_json['filename_raw_data'], header=[0,1])
     df = preprocess_wind(df, params_json['target'], params_json['features'])
-    save_data(params_json['path_preprocessed_data'], df)
-    print('Wind track preprocessed data saved to: '+params_json['path_preprocessed_data'])
+    save_data(params_json['path_preprocessed_data'], params_json['filename_preprocessed_data'], df)
+    print('Wind track preprocessed data saved to: '+params_json['path_preprocessed_data']+params_json['filename_preprocessed_data'])
 

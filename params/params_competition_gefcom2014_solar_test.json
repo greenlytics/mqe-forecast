@@ -1,7 +1,7 @@
 {
   "trial_name": "trial20",
   "trial_comment": "Only using radiation VAR169.",
-  "path_result": "./result/gefcom2014/solar/competition/",
+  "path_result": "./result/gefcom2014-solar/competition/",
   "path_raw_data": "./data/gefcom2014/raw/gefcom2014-solar-raw.csv",
   "path_preprocessed_data": "./data/gefcom2014/preprocessed/gefcom2014-solar-preprocessed.csv",
   "data_resolution": "60min",
@@ -32,7 +32,7 @@
      "type": ["quantile"],
      "alpha_range": [0.1, 1.0, 0.1],
      "quantile_postprocess": "sorting",
-     "y_min_max": [null, null]
+     "target_min_max": [null, null]
     },
   "model_params":
     {"lightgbm":

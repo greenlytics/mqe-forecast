@@ -50,13 +50,13 @@ def preprocess_data(df, params_json):
     ref_datetime = df.index.get_level_values(0)
     valid_datetime = df.index.get_level_values(1)
     lead_time = (valid_datetime-ref_datetime)/pd.Timedelta('1 hour')
-    for farm in df.columns.levels[0]:
-        df.loc[:,(farm,'LEAD_TIME')] = lead_time
+    for site in df.columns.levels[0]:
+        df.loc[:,(site,'LEAD_TIME')] = lead_time
 
     # Add ranewable features
-    for i, (coords, alt, cap, orien, tilt) in enumerate(zip(params_json['farm_coords'],
-                                                            params_json['farm_altitude'],
-                                                            params_json['farm_capacity'],
+    for i, (coords, alt, cap, orien, tilt) in enumerate(zip(params_json['site_coords'],
+                                                            params_json['site_altitude'],
+                                                            params_json['site_capacity'],
                                                             params_json['panel_orientation'],
                                                             params_json['panel_tilt'])):
         ra =  Ra(longitude=coords[0],
@@ -86,8 +86,8 @@ def preprocess_data(df, params_json):
         df.loc[:,(str(i+1),'Physical_Forecast')] = df_power
 
     # Difference between real power and physical forecast
-    for farm in df.columns.levels[0]:
-        df.loc[:,(farm,'DIFF')] = (df.loc[:,(farm,'POWER')]-df.loc[:,(farm,'Physical_Forecast')])
+    for site in df.columns.levels[0]:
+        df.loc[:,(site,'DIFF')] = (df.loc[:,(site,'POWER')]-df.loc[:,(site,'Physical_Forecast')])
 
 
     return df

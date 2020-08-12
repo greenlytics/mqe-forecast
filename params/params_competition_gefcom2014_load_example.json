@@ -1,7 +1,7 @@
 {
   "trial_name": "trial0",
   "trial_comment": "test",
-  "path_result": "./result/gefcom2014/gefcom2014-load/",
+  "path_result": "./result/gefcom2014-load/",
   "path_raw_data": "./data/gefcom2014/raw/gefcom2014-load-raw.csv",
   "filename_raw_data": "gefcom2014-load-raw.csv",
   "path_preprocessed_data": "./data/gefcom2014/preprocessed/",
@@ -51,7 +51,7 @@
       "type": ["quantile"],
       "alpha_range": [0.01, 1.0, 0.01],
       "quantile_postprocess": "sorting",
-      "y_min_max": [null, null]
+      "target_min_max": [null, null]
      },
   "model_params":
     {
