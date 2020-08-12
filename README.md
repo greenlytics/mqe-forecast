@@ -10,8 +10,8 @@ This code, `power-forecast`, is a method for energy forecasting using gradient b
 
 ## Results
 ### Solar power forecasting
-![alt text](gefcom2014-solar-teams.png "Title1")
-![alt text](gefcom2014-solar-tasks.png "Title2")
+![alt text](./plots/gefcom2014-solar-teams.png "Title1")
+![alt text](./plots/gefcom2014-solar-tasks.png "Title2")
 
 ### Wind power forecasting
 * Comparison with winners of the GEFCOM2014 competition
