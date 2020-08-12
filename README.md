@@ -9,6 +9,11 @@ This code, `power-forecast`, is a method for energy forecasting using gradient b
 ##### 4) [`scikit-learn`](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.GradientBoostingRegressor.html#sklearn.ensemble.GradientBoostingRegressor)
 
 ## Results
+### Solar power forecasting
+![alt text](gefcom2014-solar-teams.png "Title1")
+![alt text](gefcom2014-solar-tasks.png "Title2")
+
+### Wind power forecasting
 * Comparison with winners of the GEFCOM2014 competition
 * Solar power forecast and comparison with physical. 
 * Sensitivity analysis of adding more data
@@ -67,15 +72,22 @@ Wind track preprocessed data saved to: ./data/gefcom2014/preprocessed/gefcom2014
 
 [3] [Ke G. et. al. "LightGBM: A Highly Efficient Gradient Boosting Decision Tree"](https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree.pdf)
 
-[4] [Chen T, Guestrin, C. ,"XGBoost: A Scalable Tree Boosting System"](https://arxiv.org/pdf/1603.02754.pdf)
+[4] [Chen T. and Guestrin, C. ,"XGBoost: A Scalable Tree Boosting System"](https://arxiv.org/pdf/1603.02754.pdf)
+
+[5] [Anghel A. et. al. "Benchmarking and Optimization of Gradient Boosting Decision Tree Algorithms"](https://arxiv.org/pdf/1809.04559.pdf)
 
 ### Books
 [Hastie, T. Tibshirani R. Friedman J. "The Elements of Statistical Learning"](https://web.stanford.edu/~hastie/Papers/ESLII.pdf)
 <br> Great book for understanding of gradient boosting.
 
 ### Videos
-[Peter Prettenhofer - Gradient Boosted Regression Trees in scikit-learn](https://www.youtube.com/watch?v=IXZKgIsZRm0)
+[Trevor Hastie - Gradient Boosting Machine Learning](https://youtu.be/wPqtzj5VZus)
+[Peter Prettenhofer - Gradient Boosted Regression Trees in scikit-learn](https://youtu.be/IXZKgIsZRm0)
+[XGBoost: A Scalable Tree Boosting System](https://youtu.be/8Y-droPeKu8)
+[CatBoost - the new generation of gradient boosting - Anna Veronika Dorogush](https://youtu.be/8o0e-r0B5xQ)
+[Anna Veronika Dorogush: Mastering gradient boosting with CatBoost | PyData London 2019](https://youtu.be/usdEWSDisS0)
+[Crunching Your Data with CatBoost - the New Gradient Boosting Library - Vasily Ershov](https://youtu.be/37wdnpdyls4)
 
 ### Blog posts
 [CatBoost vs. Light GBM vs. XGBoost](https://towardsdatascience.com/catboost-vs-light-gbm-vs-xgboost-5f93620723db)
-<br> Comparison of the tree main GBDT implementations.
+[XGBoost, LightGBM or CatBoost — which boosting algorithm should I use?](https://medium.com/riskified-technology/xgboost-lightgbm-or-catboost-which-boosting-algorithm-should-i-use-e7fda7bb36bc)
