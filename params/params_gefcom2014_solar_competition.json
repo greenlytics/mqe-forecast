@@ -1,12 +1,11 @@
 {
-  "trial_name": "trial21",
-  "trial_comment": "Only using radiation VAR169.",
-  "path_result": "./result/gefcom2014-solar/",
+  "trial_name": "trial39",
+  "trial_comment": "Test.",
+  "path_result": "./results/gefcom2014-solar/",
   "path_raw_data": "./data/gefcom2014/raw/",
   "filename_raw_data": "gefcom2014-solar-raw.csv",
   "path_preprocessed_data": "./data/gefcom2014/preprocessed/",
   "filename_preprocessed_data": "gefcom2014-solar-preprocessed.csv",
-  "data_resolution": "60min",
   "site_coords": [[145, -37,5], [145, -37,5], [145, -37,5]],
   "site_altitude": [595, 602, 951],
   "site_capacity": [1, 1, 1],
@@ -28,14 +27,14 @@
                ["2012-04-01 01:00:00", "2014-04-01 00:00:00"],
                ["2012-04-01 01:00:00", "2014-05-01 00:00:00"],
                ["2012-04-01 01:00:00", "2014-06-01 00:00:00"]],
-     "valid": [["2013-04-01 01:00:00", "2014-05-01 00:00:00"],
-               ["2013-05-01 01:00:00", "2014-06-01 00:00:00"],
-               ["2013-06-01 01:00:00", "2014-07-01 00:00:00"],
-               ["2013-07-01 01:00:00", "2014-08-01 00:00:00"],
-               ["2013-08-01 01:00:00", "2014-09-01 00:00:00"],
-               ["2013-09-01 01:00:00", "2014-10-01 00:00:00"],
-               ["2013-10-01 01:00:00", "2014-11-01 00:00:00"],
-               ["2013-11-01 01:00:00", "2014-12-01 00:00:00"],
+     "valid": [["2013-04-01 01:00:00", "2013-05-01 00:00:00"],
+               ["2013-05-01 01:00:00", "2013-06-01 00:00:00"],
+               ["2013-06-01 01:00:00", "2013-07-01 00:00:00"],
+               ["2013-07-01 01:00:00", "2013-08-01 00:00:00"],
+               ["2013-08-01 01:00:00", "2013-09-01 00:00:00"],
+               ["2013-09-01 01:00:00", "2013-10-01 00:00:00"],
+               ["2013-10-01 01:00:00", "2013-11-01 00:00:00"],
+               ["2013-11-01 01:00:00", "2013-12-01 00:00:00"],
                ["2013-12-01 01:00:00", "2014-01-01 00:00:00"],
                ["2014-01-01 01:00:00", "2014-02-01 00:00:00"],
                ["2014-02-01 01:00:00", "2014-03-01 00:00:00"],
@@ -45,52 +44,40 @@
                ["2014-06-01 01:00:00", "2014-07-01 00:00:00"]]
     },
   "sites": ["1", "2", "3"],
-  "features": ["VAR134", "VAR157", "VAR164", "VAR165", "VAR166", "VAR167", "VAR169", "VAR175", "VAR178", "VAR228", "VAR78", "VAR79", "zenith", "azimuth", "ghi_clearsky", "dni_clearsky", "dhi_clearsky", "dni", "dhi", "Clearsky_Forecast", "Physical_Forecast"],
+  "features": ["VAR134", "VAR157", "VAR164", "VAR165", "VAR166", "VAR167", "VAR169", "VAR175", "VAR178", "VAR228", "VAR78", "VAR79", "azimuth", "zenith", "lead_time"],
   "variables_lags": 
     {
-     "VAR169": [-3, -2, -1, 1, 2, 3]
     },
   "target": "POWER",
-  "diff_target_with_physical": true,
+  "diff_target_with_physical": false,
   "target_smoothing_window": 1,
-  "train_on_day_only": true,
+  "self.train_only_zenith_angle_below": 100,
   "regression_params":
     {
      "type": ["quantile"],
-     "alpha_range": [0.1, 1.0, 0.01],
+     "alpha_range": [0.01, 1.0, 0.01],
      "quantile_postprocess": "sorting",
      "target_min_max": [0, 1]
     },
   "model_params":
     {"lightgbm":
       {
-        "learning_rate": 0.05,
-        "num_trees": 100,
+        "learning_rate": 0.1,
+        "num_trees": 80,
         "boosting": "gbdt",
         "max_leaves": 32,
-        "max_depth": 10,
+        "max_depth": 20,
         "min_data_in_leaf": 20,
         "max_bin": 30,
-        "bagging_fraction": 1,
-        "bagging_freq": 0,
-        "feature_fraction": 1,
-        "early_stopping": 10,
-        "lambda_l1": 0.0,
-        "lambda_l2": 0.0,
         "verbose": -1
       }
-    },
-  "weight_params":
-    {
-     "weight_end": 0.5,
-     "weight_shape": 150
     },
   "save_options":
     {
      "data": true,
      "prediction": true,
-     "model": false,
-     "evals": false,
+     "model": true,
+     "evals": true,
      "loss": true,
      "overall_score": true
     }

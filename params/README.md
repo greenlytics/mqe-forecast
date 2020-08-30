@@ -1,27 +1,25 @@
 # Parameters
-This page contains descriptions of all parameters in `power-forecast` as well as useful links and general advice on tuning GBDT models. 
+This page contains descriptions of all parameters in `gbdt-forecast` as well as useful links and general advice on tuning GBDT models. 
 
-## `power-forecast` parameters
-* `trial_name`: The name of the trial. Will be used to store the result.
-* `trial_comment`: Additional information about the trial.
+## `gbdt-forecast` parameters
+* `trial_name`: The name of the trial. Will be used as file name to store the result.
+* `trial_comment`: Comment about the trial setup.
 * `path_result`: Path to where the result will be stored.
 * `path_raw_data`: Path to the raw input data.
 * `path_preprocessed_data`: Path to the preprocessed input data.
-* `data_resolution`: Time resolution of time series data (e.g. `60min` or `15min`).
-* `farm_coords`: List with list of coordinates pairs of the farms in the form [`longitude`, `latitude`].
-* `farm_altitude`: List with altitude of the farms in meter.
-* `farm_capacity`: List with farm capacities in kW.
-* `panel_orientation`: List with orientation of the panels (clockwise and North is 0°).
-* `panel_tilt`: List with tilt of the panels (0° is horisontal).
-* `train_splits`: List with list of training splits corresponding to testing splits (start and end time) on the form [`start_time`, `end_time`]. Strings should have the format `YYYY-mm-dd HH:MM:SS`.
-* `test_splits`: List with list of testing splits (start and end time) on the form [`start_time`, `end_time`]. Strings should have the format `YYYY-mm-dd HH:MM:SS`.
-* `farms`: List of name of the farms to train on. Farm names corresponding to names in preprocessed data.
-* `features`: List of features to use for model prediction. Feature names corresponding to names in preprocessed data.
-* `variables_lags`: Dictionary of feature-lags pairs `{feature: lags}` where `feature` is a feature from the `features` list and `lags` is a list of lags (positive or negative) to include as additional `features` to the model.  
-* `target`: String with name of the power target variable.
-* `diff_target_with_physical`: Boolean if to use physical model as base model and learn the residuals with gradient boosting model.
-* `target_smoothing_window`: Default 1. Window to smooth the target variable before training. Should be an odd number for window to be centered.
-* `train_on_day_only`: Boolean if to only train on daytime data for which `zentih < 100°`.
+* `site_coords`: List of lists of coordinates pairs of the sites in the form `[[longitude_1, latitude_1], [longitude_2, latitude_2], ...]`.
+* `site_altitude`: List with altitude of the sites in meter. Used for physical solar power forecasting. 
+* `site_capacity`: List with farm capacities in same unit as original power time series. Used for normalisation. 
+* `panel_orientation`: List with orientation of the panels (calculated clockwise and North is 0°). Used for physical solar power forecasting. 
+* `panel_tilt`: List with tilt of the panels (0° is horisontal). Used for physical solar power forecasting.
+* `splits`: A dictionary with where keys can be `train`, `valid`, `test`. Each value is a list of lists of splits (start and end time) on the form `[[start_time_1, end_time_1], [start_time_2, end_time_2], ...]`. Strings `start_time` and `end_time` should have the format `YYYY-mm-dd HH:MM:SS` and is assumed to be UTC. 
+* `sites`: List of name of the sites to train on. Sites names corresponding to names of columns in preprocessed data.
+* `features`: List of features to use for model prediction. Feature names corresponding to names of columns in preprocessed data.
+* `variables_lags`: Dictionary of feature-lags pairs `[{feature_1: lags_1}, {feature_2: lags_2}, ...]` where `feature` is a feature from the `features` list and `lags` is a list of lags (non-zero, positive or negative integers) to include as additional `features` in the model.  
+* `target`: String with name of the power target variable. Target name corresponding to name of column in preprocessed data.
+* `diff_target_with_physical`: Boolean (`false` or `true`) if to use physical model as base model and learn the residuals with gradient boosting decision tree model.
+* `target_smoothing_window`: Default 1. Window to smooth the target variable before training. Smoothing is done with a centered boxcar window. Should be an odd number for window to be centered.
+* `train_on_day_only`: Boolean (`false` or `true`) if to only train on daytime data for which `zentih < 100°`.
 * `regression_params`:
 
   * `type`: Type of regression. Either `mean` or `quantile`.
