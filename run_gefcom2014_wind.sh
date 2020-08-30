@@ -13,4 +13,4 @@ python -W ignore ./preprocess/preprocess_gefcom2014_wind_example.py $PARMS
 python -W ignore ./main.py $PARMS
 
 # Generate plots
-#TODO make a script that generates the results plots
+python -W ignore ./plots/generate_plots_wind.py

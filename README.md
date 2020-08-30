@@ -52,7 +52,7 @@ Solar track data saved to: ./data/raw/gefcom2014-solar-raw.csv
 Load track data saved to: ./data/raw/gefcom2014-load-raw.csv
 ```
 
-## 3) Preprocessing the GEFCom2014 data
+### 3) Preprocessing the GEFCom2014 data
 Next step is to preprocess the data with feature extraction relavent for the forecasting task at hand. This repo includes examples of feature extraction for the different GEFCom2014 tracks: 
 
 ```
@@ -73,17 +73,23 @@ the processed data file will be saved to:
 Wind track preprocessed data saved to: ./data/gefcom2014/preprocessed/gefcom2014-wind-preprocessed.csv
 ```
 
-## 3) Train models and predict 
+## 4) Train models and predict 
 To train models, predict and save the results run the following script:
 
 ```
 python ./main.py params/params_competition_gefcom2014_wind_example.json
 ```
 
-The results will be saved to the `results` folder. 
+The results will be saved to the `results` folder. Train models for other tracks by changing the parameters file. 
 
-## 4) Generate plots
-Lastly, generate plots
+## 5) Generate plots
+Lastly, generate plots by running the following: 
+
+```
+python ./plots/generate_plots_wind.py
+```
+
+Plots will be saved to the `plots` folder.
 
 ## References
 

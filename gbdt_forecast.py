@@ -40,7 +40,6 @@ class Trial():
         self.target = params_json['target']
         self.model_params = params_json['model_params']
         self.regression_params = params_json['regression_params']
-        self.predict_train = params_json['predict_train']
         self.save_options = params_json['save_options']
 
         if 'quantile' in self.regression_params['type']:
@@ -63,10 +62,10 @@ class Trial():
             self.target_smoothing_window = params_json['target_smoothing_window']
         else: 
             self.target_smoothing_window = 1
-        if 'train_on_day_only' in params_json:
-            self.train_on_day_only = params_json['train_on_day_only']
+        if 'train_only_zenith_angle_below' in params_json:
+            self.train_only_zenith_angle_below = params_json['train_only_zenith_angle_below']
         else: 
-            self.train_on_day_only = False
+            self.train_only_zenith_angle_below = False
         if 'weight_params' in params_json: 
             self.weight_params = params_json['weight_params']
         else:
@@ -101,9 +100,9 @@ class Trial():
         is_nan = df_X.isna().all(axis=1) | df_y.isna().all(axis=1)
         df_model = pd.concat([df_X, df_y], axis=1)[~is_nan]
 
-        # Keep all timestamps for which zenith <= 100° (day timestamps)
-        if self.train_on_day_only:
-            idx_day = df_model[df_model['zenith'] <= 100].index
+        # Keep all timestamps for which zenith <= prescribed value (day timestamps)
+        if self.train_only_zenith_angle_below:
+            idx_day = df_model[df_model['zenith'] <= self.train_only_zenith_angle_below].index
             df_model = df_model.loc[idx_day, :]
 
         # Create target and feature DataFrames
@@ -345,10 +344,10 @@ class Trial():
         
         df_index = pd.DataFrame(index=df_X.index, columns=columns)
 
-        # Keep all timestamps for which zenith <= 100° (day timestamps)
-        if self.train_on_day_only:
-            idx_day = df_X['zenith'] <= 100
-            idx_night = df_X['zenith'] > 100
+        # Keep all timestamps for which zenith <= prescribed value (day timestamps)
+        if self.self.train_only_zenith_angle_below:
+            idx_day = df_X['zenith'] <= self.train_only_zenith_angle_below
+            idx_night = df_X['zenith'] > self.train_only_zenith_angle_below
             df_X = df_X[idx_day]
 
         df_y_pred_qs = {}
@@ -386,7 +385,7 @@ class Trial():
 
         # Create prediction output dataframe
         df_y_pred_q = df_index
-        if self.train_on_day_only:
+        if self.train_only_zenith_angle_above:
             df_y_pred_q[idx_day] = y_pred_q
             df_y_pred_q[idx_night] = 0
         else:
@@ -576,7 +575,7 @@ class Trial():
 
     def run(self, df):
 
-        print('Running trial pipeline...')
+        print('Running trial pipeline for trial: {0}...'.format(self.trial_name))
         dfs_X_train_split, dfs_y_train_split, dfs_model_train_split, weight_train_split = self.generate_dataset_split_site(df, split_set='train')
         dfs_X_valid_split, dfs_y_valid_split, dfs_model_valid_split, _ = self.generate_dataset_split_site(df, split_set='valid')
 

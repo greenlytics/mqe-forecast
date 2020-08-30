@@ -45,8 +45,8 @@ def preprocess_wind(df, target, features):
         for feature in df_features.columns:
             df.loc[:, (farm, feature)] = df_features[feature]
 
-    df_temp = pd.DataFrame(index=df.index, columns=pd.MultiIndex.from_product([df.columns.levels[0], target+features]))
-    df_temp.loc[:, (slice(None), target+features)] = df.loc[:, (slice(None), target+features)]
+    df_temp = pd.DataFrame(index=df.index, columns=pd.MultiIndex.from_product([df.columns.levels[0], [target]+features]))
+    df_temp.loc[:, (slice(None), [target]+features)] = df.loc[:, (slice(None), [target]+features)]
 
     return df_temp
 
