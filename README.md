@@ -1,23 +1,35 @@
-# power-forecast
+# gbdt-forecast
 
 ## Introduction
 This code, `gbdt-forecast`, is a method for energy and weather forecasting using gradient boosting decision trees. It considers the forecasting problem as a tabular problem without the  spatio-temporal aspects included in the modelling prior. Instead spatio-temporal features can be included as features in the tabular data. The code integrates four most popular gradient boosting implementations: 
 
-##### 1) [`lightgbm`](https://lightgbm.readthedocs.io/en/latest/) ([Link to paper](https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree.pdf))
-##### 2) [`xgboost`](https://xgboost.readthedocs.io/en/latest/) ([Link to paper](https://arxiv.org/pdf/1603.02754.pdf))
-##### 3) [`catboost`](https://catboost.ai/) ([Link to paper](https://arxiv.org/pdf/1706.09516.pdf))
+##### 1) [`lightgbm`](https://lightgbm.readthedocs.io/en/latest/) ([Link to LightGBM paper](https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree.pdf))
+##### 2) [`xgboost`](https://xgboost.readthedocs.io/en/latest/) ([Link to XGBoost paper](https://arxiv.org/pdf/1603.02754.pdf))
+##### 3) [`catboost`](https://catboost.ai/) ([Link to CatBoost paper](https://arxiv.org/pdf/1706.09516.pdf))
 ##### 4) [`scikit-learn`](https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.GradientBoostingRegressor.html#sklearn.ensemble.GradientBoostingRegressor)
 
-## Results
-### Solar power forecasting
-![alt text](./plots/gefcom2014-solar-teams.png "Title1")
-![alt text](./plots/gefcom2014-solar-tasks.png "Title2")
+## Performance benchmark on GEFCom2014 competition dataset
 
 ### Wind power forecasting
-* Comparison with winners of the GEFCOM2014 competition
-* Solar power forecast and comparison with physical. 
-* Sensitivity analysis of adding more data
-The code 
+![alt text](./plots/gefcom2014-wind-teams.png "wind-forecasting-teams")
+![alt text](./plots/gefcom2014-wind-tasks.png "wind-forecasting-tasks")
+
+### Solar power forecasting
+The solar power forecasting benchmark is performed using the parameters in `params/params_gefcom2014_solar_competition.json`. 
+
+![alt text](./plots/gefcom2014-solar-teams.png "solar-forecasting-teams")
+![alt text](./plots/gefcom2014-solar-tasks.png "solar-forecasting-tasks")
+
+## Data sensitivity analysis on GEFCom2014 competition dataset
+
+## Installation
+Clone and install the necessary libaries through conda. 
+
+```
+git clone git@github.com:greenlytics/gbdt-forecast.git
+conda env create -f environment.yml
+conda activate gbdt-forecast
+```
 
 ## Quick start
 Download the [GEFCom2014 data](https://drive.google.com/file/d/1gKSe-OMVICQ5ZcBD_jvtAPRuamTFwFqI/view?usp=sharing) and place the file `1-s2.0-S0169207016000133-mmc1.zip` in the `data` folder. 
@@ -91,33 +103,8 @@ python ./plots/generate_plots_wind.py
 
 Plots will be saved to the `plots` folder.
 
-## References
+## Aknowledgement
+The authors of this code would like to thank the Swedish Energy Agency for their financial support for this research work under the grant VindEL project number: 47070-1.
 
-### Papers
-[1] [Friedman, J. H. "Greedy Function Approximation: A Gradient Boosting Machine"](https://statweb.stanford.edu/~jhf/ftp/trebst.pdf)
-<br>The original paper on gradient boosting.
 
-[2] [Friedman, J. H. "Stochastic Gradient Boosting"](https://statweb.stanford.edu/~jhf/ftp/stobst.pdf)
-<br>
 
-[3] [Ke G. et. al. "LightGBM: A Highly Efficient Gradient Boosting Decision Tree"](https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree.pdf)
-
-[4] [Chen T. and Guestrin, C. ,"XGBoost: A Scalable Tree Boosting System"](https://arxiv.org/pdf/1603.02754.pdf)
-
-[5] [Anghel A. et. al. "Benchmarking and Optimization of Gradient Boosting Decision Tree Algorithms"](https://arxiv.org/pdf/1809.04559.pdf)
-
-### Books
-[Hastie, T. Tibshirani R. Friedman J. "The Elements of Statistical Learning"](https://web.stanford.edu/~hastie/Papers/ESLII.pdf)
-<br> Great book for understanding of gradient boosting.
-
-### Videos
-[Trevor Hastie - Gradient Boosting Machine Learning](https://youtu.be/wPqtzj5VZus)
-[Peter Prettenhofer - Gradient Boosted Regression Trees in scikit-learn](https://youtu.be/IXZKgIsZRm0)
-[XGBoost: A Scalable Tree Boosting System](https://youtu.be/8Y-droPeKu8)
-[CatBoost - the new generation of gradient boosting - Anna Veronika Dorogush](https://youtu.be/8o0e-r0B5xQ)
-[Anna Veronika Dorogush: Mastering gradient boosting with CatBoost | PyData London 2019](https://youtu.be/usdEWSDisS0)
-[Crunching Your Data with CatBoost - the New Gradient Boosting Library - Vasily Ershov](https://youtu.be/37wdnpdyls4)
-
-### Blog posts
-[CatBoost vs. Light GBM vs. XGBoost](https://towardsdatascience.com/catboost-vs-light-gbm-vs-xgboost-5f93620723db)
-[XGBoost, LightGBM or CatBoost — which boosting algorithm should I use?](https://medium.com/riskified-technology/xgboost-lightgbm-or-catboost-which-boosting-algorithm-should-i-use-e7fda7bb36bc)

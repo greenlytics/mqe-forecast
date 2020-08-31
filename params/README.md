@@ -70,3 +70,35 @@ More links:
 
 * [Parameter documentation](https://xgboost.readthedocs.io/en/latest/parameter.html)
 * [Laurae++ Interactive Documentation](https://sites.google.com/view/lauraepp/parameters)
+
+
+* [Parameter tuning](https://catboost.ai/docs/concepts/parameter-tuning.html)
+
+### Papers
+[1] [Friedman, J. H. "Greedy Function Approximation: A Gradient Boosting Machine"](https://statweb.stanford.edu/~jhf/ftp/trebst.pdf)
+<br>The original paper on gradient boosting.
+
+[2] [Friedman, J. H. "Stochastic Gradient Boosting"](https://statweb.stanford.edu/~jhf/ftp/stobst.pdf)
+<br>
+
+[3] [Ke G. et. al. "LightGBM: A Highly Efficient Gradient Boosting Decision Tree"](https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree.pdf)
+
+[4] [Chen T. and Guestrin, C. ,"XGBoost: A Scalable Tree Boosting System"](https://arxiv.org/pdf/1603.02754.pdf)
+
+[5] [Anghel A. et. al. "Benchmarking and Optimization of Gradient Boosting Decision Tree Algorithms"](https://arxiv.org/pdf/1809.04559.pdf)
+
+### Books
+[Hastie, T. Tibshirani R. Friedman J. "The Elements of Statistical Learning"](https://web.stanford.edu/~hastie/Papers/ESLII.pdf)
+<br> Great book for understanding of gradient boosting.
+
+### Videos
+[Trevor Hastie - Gradient Boosting Machine Learning](https://youtu.be/wPqtzj5VZus)
+[Peter Prettenhofer - Gradient Boosted Regression Trees in scikit-learn](https://youtu.be/IXZKgIsZRm0)
+[XGBoost: A Scalable Tree Boosting System](https://youtu.be/8Y-droPeKu8)
+[CatBoost - the new generation of gradient boosting - Anna Veronika Dorogush](https://youtu.be/8o0e-r0B5xQ)
+[Anna Veronika Dorogush: Mastering gradient boosting with CatBoost | PyData London 2019](https://youtu.be/usdEWSDisS0)
+[Crunching Your Data with CatBoost - the New Gradient Boosting Library - Vasily Ershov](https://youtu.be/37wdnpdyls4)
+
+### Blog posts
+[CatBoost vs. Light GBM vs. XGBoost](https://towardsdatascience.com/catboost-vs-light-gbm-vs-xgboost-5f93620723db)
+[XGBoost, LightGBM or CatBoost — which boosting algorithm should I use?](https://medium.com/riskified-technology/xgboost-lightgbm-or-catboost-which-boosting-algorithm-should-i-use-e7fda7bb36bc)
