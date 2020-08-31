@@ -33,10 +33,10 @@ def preprocess_data(df, params_json):
     df.columns = pd.MultiIndex.from_product(columns)
 
     # Average point features over hour
-    features_point = ['VAR134', 'VAR157', 'VAR164', 'VAR165', 'VAR166', 'VAR167', 'VAR78', 'VAR79']
-    df_point = df.loc[:,(slice(None),features_point)]
-    df_point = df_point.rolling(2).mean().shift(-1).fillna(method='ffill')
-    df.loc[:,(slice(None),features_point)] = df_point
+    #features_point = ['VAR134', 'VAR157', 'VAR164', 'VAR165', 'VAR166', 'VAR167', 'VAR78', 'VAR79']
+    #df_point = df.loc[:,(slice(None),features_point)]
+    #df_point = df_point.rolling(2).mean().shift(-1).fillna(method='ffill')
+    #df.loc[:,(slice(None),features_point)] = df_point
 
     # Differentiate accumulated features
     features_accum = ['VAR169', 'VAR175', 'VAR178', 'VAR228']

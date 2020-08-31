@@ -172,26 +172,27 @@ class Trial():
             train_set = cb.Pool(df_model_train[self.features], label=df_model_train[[self.target]], weight=weight)
             if df_model_valid is not None: 
                 valid_set = cb.Pool(df_model_valid[self.features], label=df_model_valid[[self.target]])
-                valid_sets = [train_set, valid_set]      
-            else: 
-                valid_sets = [valid_set]
+                valid_sets = [valid_set]      
         elif model == 'skboost' in self.model_params:
             train_set = [df_model_train[self.features], df_model_train[self.target], weight]
 
         return train_set, valid_sets
 
     def train_on_objective(self, train_set, valid_sets, model, objective='mean', alpha=None):
+
         if model == 'lightgbm':
             with warnings.catch_warnings():
                 if self.model_params['lightgbm']['verbose'] == -1: 
                     warnings.simplefilter("ignore")
                 if objective == 'mean': 
-                    self.model_params['lightgbm']['objective'] = 'mean_squared_error'
+                    objective_lgb = 'mean_squared_error'
                 elif objective == 'quantile': 
-                    self.model_params['lightgbm']['objective'] = 'quantile'
+                    objective_lgb = 'quantile'
                     self.model_params['lightgbm']['alpha'] = alpha
                 else: 
-                    raise ValueError()
+                    raise ValueError("'objective' for lightgbm must be either 'mean' or 'quantile'")
+                self.model_params['lightgbm']['objective'] = objective_lgb
+                
                 evals_result = {}
                 gbm = lgb.train(self.model_params['lightgbm'],
                                 train_set,
@@ -200,11 +201,13 @@ class Trial():
                                 evals_result=evals_result,
                                 verbose_eval=False,
                                 callbacks=None)
-        if model == 'xgboost':
+                evals_result = {key: value[objective_lgb] for key, value in evals_result.items()}
+
+        elif model == 'xgboost':
             if objective == 'mean': 
                 self.model_params['xgboost']['objective'] = 'reg:squarederror'
             else: 
-                raise ValueError()
+                raise ValueError("'objective' for xgboost must be 'mean'.")
             evals_result = {}
             gbm = xgb.train(self.model_params['xgboost'],
                             train_set,
@@ -212,20 +215,24 @@ class Trial():
                             evals=valid_sets, 
                             evals_result=evals_result,
                             verbose_eval=False)
-        if model=='catboost':
+            evals_result = None #TODO Add evals for xgboost
+
+        elif model=='catboost':
             if objective == 'mean': 
-                self.model_params['catboost']['objective'] = 'Lq:q=2'
+                objective_cb = 'Lq:q=2'
             elif objective == 'quantile': 
-                self.model_params['catboost']['objective'] = 'Quantile:alpha='+str(alpha)
+                objective_cb = 'Quantile:alpha={0:g}'.format(alpha)
             else: 
-                raise ValueError()
+                raise ValueError("'objective' must be one of ['mean', 'quantile']")
+            self.model_params['catboost']['objective'] = objective_cb
+
             gbm = cb.train(pool=train_set,
                            params=self.model_params['catboost'],
                            eval_set=valid_sets,
-                           verbose=False,
-                           allow_writing_files=False)
-            evals_result = None
-        if model=='skboost':
+                           verbose=False)
+            evals_result = {key: value[objective_cb] for key, value in gbm.evals_result_.items()}
+
+        elif model=='skboost':
             if objective == 'mean': 
                 self.model_params['skboost']['loss'] = 'ls'
                 self.model_params['skboost']['criterion'] = 'friedman_mse'
@@ -234,11 +241,15 @@ class Trial():
                 self.model_params['skboost']['alpha'] = alpha
                 self.model_params['skboost']['criterion'] = 'mae' #TODO Check how `criterion` affects quantile loss.
             else: 
-                raise ValueError()
+                raise ValueError("'objective' must be one of ['mean', 'quantile']")
+
             gbm = ensemble.GradientBoostingRegressor(**self.model_params['skboost'])
             gbm.fit(train_set[0], train_set[1], sample_weight=train_set[2])
-            evals_result = None
+            evals_result = None #TODO Add evals for skboost
 
+        else: 
+            raise ValueError("'objective' for skboost must be either 'mean' or 'quantile'")
+        
         return gbm, evals_result
 
     def train(self, train_set, valid_sets, model): 
@@ -260,7 +271,7 @@ class Trial():
             for alpha in alpha_q:
                 gbm, evals_result = self.train_on_objective(train_set, valid_sets, model, objective='quantile', alpha=alpha)
                 gbm_q['quantile{0:.2f}'.format(alpha)] = gbm
-                evals_result_q['quantile{0:.2f}'.format(alpha)] = {'train': evals_result['training']['quantile'], 'valid': evals_result['valid_1']['quantile']}
+                evals_result_q['quantile{0:.2f}'.format(alpha)] = evals_result
 
         if not (('mean' in self.regression_params['type']) or ('quantile' in self.regression_params['type'])):
             raise ValueError('Value of regression parameter "objective" not recognized.')
@@ -290,8 +301,9 @@ class Trial():
                             weight = None
 
                         train_set, valid_sets = self.build_model_dataset(df_model_train, model, df_model_valid=df_model_valid, weight=weight)
-                        gbm_q, evals_result_q = self.train(train_set, valid_sets, model)
+                        gbm_q, evals_result_q = self.train(train_set, valid_sets, model) #TODO Make it possible to train starting from an existing model. E.g. LightGBM has a `input_model` option. 
 
+                        #TODO Add support for categorical_features. 
                         gbm_site.append(gbm_q)
                         evals_result_site.append(evals_result_q)
                         
@@ -308,6 +320,7 @@ class Trial():
 
     def predict(self, df_X, gbm_q, model): 
         # Use trained models to predict
+        #TODO Use SHAP to estimate contribution of different features. https://github.com/slundberg/shap
 
         def post_process(y_pred):
 
@@ -345,7 +358,7 @@ class Trial():
         df_index = pd.DataFrame(index=df_X.index, columns=columns)
 
         # Keep all timestamps for which zenith <= prescribed value (day timestamps)
-        if self.self.train_only_zenith_angle_below:
+        if self.train_only_zenith_angle_below:
             idx_day = df_X['zenith'] <= self.train_only_zenith_angle_below
             idx_night = df_X['zenith'] > self.train_only_zenith_angle_below
             df_X = df_X[idx_day]
@@ -385,7 +398,7 @@ class Trial():
 
         # Create prediction output dataframe
         df_y_pred_q = df_index
-        if self.train_only_zenith_angle_above:
+        if self.train_only_zenith_angle_below:
             df_y_pred_q[idx_day] = y_pred_q
             df_y_pred_q[idx_night] = 0
         else:
@@ -539,16 +552,15 @@ class Trial():
                 os.makedirs(trial_path+'/'+key)
                 for model in self.model_params.keys():
                     for split in range(len(result_evals[key][model])):
-                        file_name = key+'_split_{0}.csv'.format(split)
-                        if model == 'lightgbm':
-                            data = result_evals[key][model][split]
-                            data = {(level1_key, level2_key, level3_key): pd.Series(values)
-                                        for level1_key, level2_dict in zip(self.sites,data)
-                                        for level2_key, level3_dict in level2_dict.items()
-                                        for level3_key, values in level3_dict.items()}
-                            df = pd.DataFrame(data)
-                            df.index.name = 'trees'
-                            df.to_csv(trial_path+'/'+key+'/'+file_name)
+                        file_name = key+'_'+model+'_split_{0}.csv'.format(split)
+                        data = result_evals[key][model][split]
+                        data = {(level1_key, level2_key, level3_key): pd.Series(values)
+                                for level1_key, level2_dict in zip(self.sites,data)
+                                for level2_key, level3_dict in level2_dict.items()
+                                for level3_key, values in level3_dict.items()}
+                        df = pd.DataFrame(data)
+                        df.index.name = 'trees'
+                        df.to_csv(trial_path+'/'+key+'/'+file_name)
         if self.save_options['loss'] == True:
             for key in result_loss.keys():
                 os.makedirs(trial_path+'/'+key)
@@ -573,7 +585,7 @@ class Trial():
         print('Results saved to: '+trial_path)
 
 
-    def run(self, df):
+    def run(self, df, params_json):
 
         print('Running trial pipeline for trial: {0}...'.format(self.trial_name))
         dfs_X_train_split, dfs_y_train_split, dfs_model_train_split, weight_train_split = self.generate_dataset_split_site(df, split_set='train')
@@ -607,4 +619,4 @@ if __name__ == '__main__':
 
     df = load_data(params_json['path_preprocessed_data']+params_json['filename_preprocessed_data'])
     trial = Trial(params_json)
-    trial.run(df)
+    trial.run(df, params_json)

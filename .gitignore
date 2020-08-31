@@ -5,5 +5,6 @@ __pycache__
 catboost_info
 notebooks
 results
+params/**
 data/**
 !data/.gitkeep

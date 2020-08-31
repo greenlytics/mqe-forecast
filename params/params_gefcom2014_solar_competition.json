@@ -1,5 +1,5 @@
 {
-  "trial_name": "trial39",
+  "trial_name": "trial43",
   "trial_comment": "Test.",
   "path_result": "./results/gefcom2014-solar/",
   "path_raw_data": "./data/gefcom2014/raw/",
@@ -47,11 +47,12 @@
   "features": ["VAR134", "VAR157", "VAR164", "VAR165", "VAR166", "VAR167", "VAR169", "VAR175", "VAR178", "VAR228", "VAR78", "VAR79", "azimuth", "zenith", "lead_time"],
   "variables_lags": 
     {
+      "VAR169": [-1, 1]
     },
   "target": "POWER",
   "diff_target_with_physical": false,
   "target_smoothing_window": 1,
-  "self.train_only_zenith_angle_below": 100,
+  "train_only_zenith_angle_below": 100,
   "regression_params":
     {
      "type": ["quantile"],
@@ -61,16 +62,46 @@
     },
   "model_params":
     {"lightgbm":
-      {
+      { 
         "learning_rate": 0.1,
-        "num_trees": 80,
+        "num_trees": 20,
         "boosting": "gbdt",
-        "max_leaves": 32,
+        "max_leaves": 31,
         "max_depth": 20,
         "min_data_in_leaf": 20,
         "max_bin": 30,
+        "bagging_fraction": 1.0,
+        "bagging_freq": 0,
+        "early_stopping_rounds": 10,
+        "random_seed": 1337,
         "verbose": -1
+      },
+    "catboost":
+      {
+        "learning_rate": 0.1,
+        "num_trees": 20,
+        "max_depth": 20,
+        "min_data_in_leaf": 20,
+        "max_bin": 30,
+        "grow_policy": "SymmetricTree",
+        "l2_leaf_reg": 0, 
+        "random_seed": 1337, 
+        "allow_writing_files": false,
+        "verbose": false
+      },
+    "skboost":
+      {
+        "learning_rate": 0.1,
+        "n_estimators": 20,
+        "max_depth": 20,
+        "min_samples_leaf": 20,
+        "verbose": 0
       }
+    },
+  "weight_params":
+    {
+     "weight_end": 0.5,
+     "weight_shape": 80
     },
   "save_options":
     {
