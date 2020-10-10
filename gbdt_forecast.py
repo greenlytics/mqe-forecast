@@ -585,6 +585,7 @@ class Trial():
 
         print('Results saved to: '+trial_path)
 
+        return score_train_model, score_valid_model
 
     def run(self, df):
 
@@ -613,6 +614,8 @@ class Trial():
 
         self.save_result(self.params_json, result_data, result_prediction, result_model, result_evals, result_loss)
 
+        return score_train_model, score_valid_model
+    
 if __name__ == '__main__':
     params_path = sys.argv[1]
     with open(params_path, 'r', encoding='utf-8') as file:
