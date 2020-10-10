@@ -29,6 +29,8 @@ def load_data(path_data):
 
 class Trial():
     def __init__(self, params_json):
+        self.params_json = params_json
+
         # Mandatory input variables
         self.trial_name = params_json['trial_name']
         self.trial_comment = params_json['trial_comment']
@@ -72,7 +74,6 @@ class Trial():
             self.weight_params = False
         # Checks
  
-
 
     def generate_dataset(self, df, split, site): 
 
@@ -585,7 +586,7 @@ class Trial():
         print('Results saved to: '+trial_path)
 
 
-    def run(self, df, params_json):
+    def run(self, df):
 
         print('Running trial pipeline for trial: {0}...'.format(self.trial_name))
         dfs_X_train_split, dfs_y_train_split, dfs_model_train_split, weight_train_split = self.generate_dataset_split_site(df, split_set='train')
@@ -610,7 +611,7 @@ class Trial():
         result_loss = {'dfs_loss_train': dfs_loss_train_model,
                     'dfs_loss_valid': dfs_loss_valid_model}
 
-        self.save_result(params_json, result_data, result_prediction, result_model, result_evals, result_loss)
+        self.save_result(self.params_json, result_data, result_prediction, result_model, result_evals, result_loss)
 
 if __name__ == '__main__':
     params_path = sys.argv[1]
@@ -619,4 +620,4 @@ if __name__ == '__main__':
 
     df = load_data(params_json['path_preprocessed_data']+params_json['filename_preprocessed_data'])
     trial = Trial(params_json)
-    trial.run(df, params_json)
+    trial.run(df)
