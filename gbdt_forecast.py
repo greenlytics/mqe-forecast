@@ -612,7 +612,7 @@ class Trial():
         result_loss = {'dfs_loss_train': dfs_loss_train_model,
                     'dfs_loss_valid': dfs_loss_valid_model}
 
-        self.save_result(self.params_json, result_data, result_prediction, result_model, result_evals, result_loss)
+        score_train_model, score_valid_model = self.save_result(self.params_json, result_data, result_prediction, result_model, result_evals, result_loss)
 
         return score_train_model, score_valid_model
     
