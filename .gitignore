@@ -7,4 +7,6 @@ notebooks
 results
 params/**
 data/**
+result
 !data/.gitkeep
+.ipynb_checkpoints
