@@ -48,6 +48,7 @@
      "alpha_range": [0.01, 1.0, 0.01], 
      "quantile_postprocess": "sorting",
      "target_min_max": [0, 1]},
+  "parallel_backend": "dask",
   "model_params":
       {"lightgbm":
        {

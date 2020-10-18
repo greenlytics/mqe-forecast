@@ -14,7 +14,7 @@
                ["2013-12-01 01:00:00", "2014-01-01 00:00:00"]]},
   "sites": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
   "features": ["Utot10", "Theta10", "Utot100", "Theta100"],
-  "target": ["TARGETVAR"],
+  "target": "TARGETVAR",
   "diff_target_with_physical": false,
   "target_smoothing_window": 1,
   "regression_params":
@@ -38,15 +38,16 @@
          "early_stopping": 5,
          "lambda_l1": 0.0,
          "lambda_l2": 0.0,
-         "verbose": -1
+         "verbose": -1,
+         "num_threads": 1
        }
       },
   "weight_params":
     {"weight_end": 0.5,
      "weight_shape": 80},
   "save_options":
-     {"data": true,
-      "prediction": true,
+     {"data": false,
+      "prediction": false,
       "model": false,
       "evals": false,
       "loss": true,

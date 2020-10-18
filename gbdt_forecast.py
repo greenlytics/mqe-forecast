@@ -10,6 +10,7 @@ import datetime
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import joblib 
 
 from sklearn.isotonic import IsotonicRegression
 
@@ -43,7 +44,7 @@ class Trial():
         self.model_params = params_json['model_params']
         self.regression_params = params_json['regression_params']
         self.save_options = params_json['save_options']
-
+        
         if 'quantile' in self.regression_params['type']:
             alpha_q = np.arange(self.regression_params['alpha_range'][0],
                                 self.regression_params['alpha_range'][1],
@@ -73,6 +74,9 @@ class Trial():
         else:
             self.weight_params = False
         # Checks
+        
+        # runtime
+        self.parallel_backend = params_json.get("parallel_backend", "threading")
  
 
     def generate_dataset(self, df, split, site): 
@@ -269,8 +273,13 @@ class Trial():
                                 self.regression_params['alpha_range'][1],
                                 self.regression_params['alpha_range'][2])
 
-            for alpha in alpha_q:
-                gbm, evals_result = self.train_on_objective(train_set, valid_sets, model, objective='quantile', alpha=alpha)
+            with joblib.parallel_backend(self.parallel_backend):
+                results = joblib.Parallel(n_jobs=-1)(
+                                joblib.delayed(self.train_on_objective)(
+                                    train_set, valid_sets,
+                                    model, objective='quantile', alpha=alpha)
+                                    for alpha in alpha_q)
+            for (gbm, evals_result), alpha in zip(results, alpha_q):
                 gbm_q['quantile{0:.2f}'.format(alpha)] = gbm
                 evals_result_q['quantile{0:.2f}'.format(alpha)] = evals_result
 
@@ -301,6 +310,7 @@ class Trial():
                         else:
                             weight = None
 
+                        
                         train_set, valid_sets = self.build_model_dataset(df_model_train, model, df_model_valid=df_model_valid, weight=weight)
                         gbm_q, evals_result_q = self.train(train_set, valid_sets, model) #TODO Make it possible to train starting from an existing model. E.g. LightGBM has a `input_model` option. 
 
@@ -612,7 +622,7 @@ class Trial():
         result_loss = {'dfs_loss_train': dfs_loss_train_model,
                     'dfs_loss_valid': dfs_loss_valid_model}
 
-        self.save_result(self.params_json, result_data, result_prediction, result_model, result_evals, result_loss)
+        score_train_model, score_valid_model = self.save_result(self.params_json, result_data, result_prediction, result_model, result_evals, result_loss)
 
         return score_train_model, score_valid_model
     
