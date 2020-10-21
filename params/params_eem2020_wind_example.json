@@ -1,0 +1,54 @@
+{
+  "trial_name": "trial0",
+  "trial_comment": "test",
+  "path_result": "./result/eem20/",
+  "path_raw_data": "./data/eem20/",
+  "filename_raw_data": "eem2020-raw.csv",
+  "path_preprocessed_data": "./data/eem20/preprocessed/",
+  "filename_preprocessed_data": "eem2020-preprocessed.csv",
+  "data_resolution": "60min",
+  "splits":
+    {"train": [["2000-01-01 01:00:00", "2000-10-01 00:00:00"]],
+     "valid": [["2001-01-01 01:00:00", "2001-02-01 00:00:00"]]},
+  "sites": ["SE1", "SE2", "SE3", "SE4"],
+  "features": ["WindSpeed_1", "WindSpeed_2", "WindSpeed_3", "WindSpeed_4",
+               "WindDirection_1", "WindDirection_3", "WindDirection_3", "WindDirection_4"],
+  "target": "Power",
+  "diff_target_with_physical": false,
+  "target_smoothing_window": 1,
+  "regression_params":
+    {"type": ["quantile"],
+     "alpha_range": [0.01, 1.0, 0.01], 
+     "quantile_postprocess": "sorting",
+     "target_min_max": [0, 1]},
+  "model_params":
+      {"lightgbm":
+       {
+         "learning_rate": 0.1,
+         "num_trees": 20,
+         "boosting": "gbdt",
+         "max_leaves": 32,
+         "max_depth": 10,
+         "min_data_in_leaf": 20,
+         "max_bin": 30,
+         "bagging_fraction": 1,
+         "bagging_freq": 0,
+         "feature_fraction": 1,
+         "early_stopping": 5,
+         "lambda_l1": 0.0,
+         "lambda_l2": 0.0,
+         "verbose": -1,
+         "num_threads": 1
+       }
+      },
+  "weight_params":
+    {"weight_end": 0.5,
+     "weight_shape": 80},
+  "save_options":
+     {"data": false,
+      "prediction": false,
+      "model": false,
+      "evals": false,
+      "loss": true,
+      "overall_score": true}
+}
