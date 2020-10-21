@@ -13,4 +13,4 @@ python -W ignore ./preprocess/preprocess_gefcom2014_wind_example.py $PARMS
 python -W ignore ./gbdt_forecast.py $PARMS
 
 # Generate plots
-python -W ignore ./generate_plots_wind.py
+# python -W ignore ./generate_plots_wind.py
