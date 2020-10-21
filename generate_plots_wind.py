@@ -13,7 +13,7 @@ def load_loss(path):
     return dfs_split
 
 if __name__ == '__main__':
-    path = './result/gefcom2014-wind/trial11/dfs_loss_valid_model/*.csv'
+    path = './result/gefcom2014-wind/trial_043/dfs_loss_valid/*.csv'
     dfs_loss_split_valid = load_loss(path)
     loss_mean_valid = [df.mean().mean() for df in dfs_loss_split_valid]
 

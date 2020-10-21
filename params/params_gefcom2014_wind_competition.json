@@ -39,7 +39,34 @@
                ["2013-11-01 01:00:00", "2013-12-01 00:00:00"],
                ["2013-12-01 01:00:00", "2014-01-01 00:00:00"]]},
   "sites": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
-  "features": ["Utot10", "Theta10", "Utot100", "Theta100"],
+  "features": ["Utot10", "Theta10", "Theta100", "Utot310", "Utot3100", "Utotdiff", "Utot10_Acc", "Utot100_Acc",
+               "O_UTot100_1", "O_UTot100_2", "O_UTot100_3", "O_UTot100_4", "O_UTot100_5", 
+               "O_UTot100_6", "O_UTot100_7", "O_UTot100_8", "O_UTot100_9", "O_UTot100_10",
+               "O_Theta100_1", "O_Theta100_2", "O_Theta100_3", "O_Theta100_4", "O_Theta100_5", 
+               "O_Theta100_6", "O_Theta100_7", "O_Theta100_8", "O_Theta100_9", "O_Theta100_10",
+               "O_UTot100_Mean", "O_UTot100_Std", "O_UTot100_Min", "O_UTot100_Max",               
+               "O_Theta100_Mean", "O_Theta100_Std"
+              ],
+  "variables_lags": 
+    {
+      "Utot10": [-1, 1],
+      "Utot310": [-1, 1],
+      "Utot3100": [-1, 1],
+      "Utot10_Acc": [-1, 1],
+      "Utot100_Acc": [-1, 1],
+      "O_UTot100_Mean": [-2, -1, 1, 2], 
+      "O_UTot100_Std": [-2, -1, 1, 2], 
+      "O_UTot100_1": [-2, -1, 1, 2], 
+      "O_UTot100_2": [-2, -1, 1, 2], 
+      "O_UTot100_3": [-2, -1, 1, 2], 
+      "O_UTot100_4": [-2, -1, 1, 2], 
+      "O_UTot100_5": [-2, -1, 1, 2], 
+      "O_UTot100_6": [-2, -1, 1, 2], 
+      "O_UTot100_7": [-2, -1, 1, 2], 
+      "O_UTot100_8": [-2, -1, 1, 2], 
+      "O_UTot100_9": [-2, -1, 1, 2], 
+      "O_UTot100_10": [-2, -1, 1, 2]
+    },
   "target": "TARGETVAR",
   "diff_target_with_physical": false,
   "target_smoothing_window": 1,
@@ -48,7 +75,8 @@
      "alpha_range": [0.01, 1.0, 0.01], 
      "quantile_postprocess": "sorting",
      "target_min_max": [0, 1]},
-  "parallel_backend": "dask",
+  "parallel_processing": {"backend": "dask",
+                          "n_workers": -1},
   "model_params":
       {"lightgbm":
        {

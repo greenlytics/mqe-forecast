@@ -45,6 +45,12 @@ class Trial():
         self.regression_params = params_json['regression_params']
         self.save_options = params_json['save_options']
         
+        if 'parallel_processing' in params_json:
+            self.parallel_processing = params_json['parallel_processing']
+        else:
+            self.parallel_processing = {'backend': 'threading',
+                                        'n_workers': 1}
+            
         if 'quantile' in self.regression_params['type']:
             alpha_q = np.arange(self.regression_params['alpha_range'][0],
                                 self.regression_params['alpha_range'][1],
@@ -83,10 +89,14 @@ class Trial():
 
         def add_lags(df, variables_lags): 
             # Lagged features
-            for variable, lags in variables_lags.items():
-                for lag in lags:
-                    df.loc[:, variable+'_lag{0}'.format(lag)] = df.loc[:, variable].groupby('ref_datetime').shift(lag)
-
+            vspec = pd.DataFrame([(k, lag) for k, v in variables_lags.items() for lag in v],
+                                 columns=["Variable", "Lag"])\
+                              .set_index("Variable")\
+                              .sort_values("Lag")
+            for lag, variables in vspec.groupby("Lag").groups.items():
+                shifted = df.loc[:, sorted(variables)].groupby('ref_datetime').shift(lag)
+                shifted.columns = ['%s_lag%s' % (variable, lag) for variable in sorted(variables)]
+                df = pd.concat([df, shifted], axis=1)
             return df
 
         # Make target into list if not already
@@ -273,8 +283,8 @@ class Trial():
                                 self.regression_params['alpha_range'][1],
                                 self.regression_params['alpha_range'][2])
 
-            with joblib.parallel_backend(self.parallel_backend):
-                results = joblib.Parallel(n_jobs=-1)(
+            with joblib.parallel_backend(self.parallel_processing['backend']):
+                results = joblib.Parallel(n_jobs=self.parallel_processing['n_workers'])(
                                 joblib.delayed(self.train_on_objective)(
                                     train_set, valid_sets,
                                     model, objective='quantile', alpha=alpha)
@@ -592,7 +602,9 @@ class Trial():
                 else:
                     with open(file_name, 'a') as file:
                         file.write('Name: {0}; Comment: {1}; Model: {2}; Train score {3}; valid score {4};\n'.format(self.trial_name, self.trial_comment, model, score_train_model[model], score_valid_model[model]))
-
+        else:
+            score_train_model = None
+            score_valid_model = None
         print('Results saved to: '+trial_path)
 
         return score_train_model, score_valid_model
