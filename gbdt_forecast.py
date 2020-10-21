@@ -201,8 +201,10 @@ class Trial():
                     warnings.simplefilter("ignore")
                 if objective == 'mean': 
                     objective_lgb = 'mean_squared_error'
+                    eval_key_name = 'l2'
                 elif objective == 'quantile': 
                     objective_lgb = 'quantile'
+                    eval_key_name = 'quantile'
                     self.model_params['lightgbm']['alpha'] = alpha
                 else: 
                     raise ValueError("'objective' for lightgbm must be either 'mean' or 'quantile'")
@@ -216,7 +218,7 @@ class Trial():
                                 evals_result=evals_result,
                                 verbose_eval=False,
                                 callbacks=None)
-                evals_result = {key: value[objective_lgb] for key, value in evals_result.items()}
+                evals_result = {key: value[eval_key_name] for key, value in evals_result.items()}
 
         elif model == 'xgboost':
             if objective == 'mean': 
@@ -469,7 +471,6 @@ class Trial():
                         y_pred = df_y_pred.values
 
                         loss = (y_pred-y_true)**2
-                        print(loss.shape)
 
                         df_loss = pd.DataFrame(data=loss, index=df_y_pred.index, columns=df_y_pred.columns)
                         

@@ -75,22 +75,24 @@
      "alpha_range": [0.01, 1.0, 0.01], 
      "quantile_postprocess": "sorting",
      "target_min_max": [0, 1]},
-  "parallel_processing": {"backend": "dask",
+  "parallel_processing": {"backend": "loky",
                           "n_workers": -1},
   "model_params":
       {"lightgbm":
        {
-         "learning_rate": 0.05,
-         "num_trees": 120,
-         "boosting": "gbdt",
-         "max_leaves": 32,
-         "max_depth": 10,
-         "min_data_in_leaf": 20,
-         "max_bin": 30,
-         "early_stopping": 10,
-         "lambda_l1": 0.0,
-         "lambda_l2": 0.0,
-         "verbose": -1
+          "learning_rate": 0.2,
+          "num_trees": 300,
+          "boosting": "gbdt",
+          "max_leaves": 128,
+          "max_depth": 8,
+          "min_data_in_leaf": 50,
+          "max_bin": 30,
+          "early_stopping": 30,
+          "lambda_l1": 0.0,
+          "lambda_l2": 0.001,
+          "verbose": -1,
+          "num_threads": 1,
+          "subsample": 1.0
        }
       },
   "weight_params":

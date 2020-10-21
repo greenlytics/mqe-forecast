@@ -85,6 +85,7 @@
      "data": true,
      "prediction": true,
      "model": false,
+     "evals": false,
      "loss": true,
      "overall_score": true
     }

@@ -112,6 +112,7 @@
      "data": true,
      "prediction": true,
      "model": true,
+     "evals": false,
      "loss": true,
      "overall_score": true
     }

@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Select params.json file
-PARMS="./params/params_gefcom2014_solar_competition_lightgbm.json"
+PARMS="./params/params_gefcom2014_solar_example.json"
 
 # Extract gefcom2014 data
-#python -W ignore ./preprocess/extract_gefcom2014_wind_solar_load.py solar
+python -W ignore ./preprocess/extract_gefcom2014_wind_solar_load.py solar
 
 # Preprocess gefcom2014 data
-#python -W ignore ./preprocess/preprocess_gefcom2014_solar_example.py $PARMS
+python -W ignore ./preprocess/preprocess_gefcom2014_solar_example.py $PARMS
 
 # Train model
 python -W ignore ./gbdt_forecast.py $PARMS

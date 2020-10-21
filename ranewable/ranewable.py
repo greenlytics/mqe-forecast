@@ -86,7 +86,7 @@ class Ra():
 
 
     def infer_midx(self, index): 
-        is_multi_index = isinstance(index, pd.core.index.MultiIndex)
+        is_multi_index = isinstance(index, pd.MultiIndex)
         if is_multi_index:
             multi_index = index
             index = index.get_level_values(1)

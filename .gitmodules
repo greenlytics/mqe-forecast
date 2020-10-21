@@ -1,0 +1,7 @@
+[submodule "ranewable"]
+	path = glplatform/ranewable
+	url = https://github.com/greenlytics/ranewable
+[submodule "amunewable"]
+	path = glplatform/amunewable
+	url = https://github.com/greenlytics/amunewable
+
