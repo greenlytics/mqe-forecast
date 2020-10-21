@@ -13,10 +13,10 @@ def load_loss(path):
     return dfs_split
 
 if __name__ == '__main__':
-    path = './result/gefcom2014-solar/trial21/dfs_loss_valid_model/*.csv'
+    path = './result/gefcom2014-solar/trial45/dfs_loss_valid_model/*.csv'
     dfs_loss_split_valid = load_loss(path)
     loss_mean_valid = [df.mean().mean() for df in dfs_loss_split_valid]
-
+    print(loss_mean_valid)
     # Load competition scores
     df_scores = pd.read_excel('./data/gefcom2014/gefcom2014-scores.xlsx', index_col=0, header=0, sheet_name='Solar')
     df_scores.index = ['Participant {0}'.format(i+1) for i in range(len(df_scores.index))]
