@@ -14,7 +14,7 @@ This folder contains some exploration and documentation in the form of Jupyter n
 <br/> Exploring model training diagnostics of forecasting model trained on the GEFCom2014 Solar data.
 
 * [nb-evaluate-diagnostics-gefcom2014-wind.ipynb](https://github.com/greenlytics/site_forecast/blob/gefcom2014/notebooks/nb-evaluate-diagnostics-gefcom2014-wind.ipynb)
-<br/> Exploring model training diagnostics of `site_forecast` trained on the GEFCom2014 Wind data.
+<br/> Exploring model training diagnostics of forecasting model trained on the GEFCom2014 Wind data.
 
 * [nb-quantile-postprocessing.ipynb](https://github.com/greenlytics/site_forecast/blob/gefcom2014/notebooks/nb-quantile-postprocessing.ipynb)
 <br/> Exploration of methods to postprocess quantiles. 
