@@ -12,7 +12,7 @@
      "valid": [["2001-01-01 01:00:00", "2001-02-01 00:00:00"]]},
   "sites": ["SE1", "SE2", "SE3", "SE4"],
   "features": ["WindSpeed_1", "WindSpeed_2", "WindSpeed_3", "WindSpeed_4",
-               "WindDirection_1", "WindDirection_3", "WindDirection_3", "WindDirection_4"],
+               "WindDirection_1", "WindDirection_2", "WindDirection_3", "WindDirection_4"],
   "target": "Power",
   "diff_target_with_physical": false,
   "target_smoothing_window": 1,
