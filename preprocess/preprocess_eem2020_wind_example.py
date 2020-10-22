@@ -15,7 +15,7 @@ def load_data(path):
     ds = xr.open_mfdataset(files, parallel=True)
     ds_subset = ds.isel(x=slice(0, 71, 20), y=slice(0, 169, 50), ensemble_member=[0, 1, 2]).compute()
 
-    df_production = pd.read_csv(f"{path}/windpower_task6.csv", index_col=0, parse_dates=[0])
+    df_production = pd.read_csv(f"{path}/windpower_task0_updated.csv", index_col=0, parse_dates=[0])
     df_production.index = df_production.index.tz_localize(None)
 
     return ds_subset, df_production
