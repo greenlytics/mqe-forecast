@@ -9,7 +9,7 @@
   "data_resolution": "60min",
   "splits":
     {"train": [["2000-01-01 01:00:00", "2000-10-01 00:00:00"]],
-     "valid": [["2001-01-01 01:00:00", "2001-02-01 00:00:00"]]},
+     "valid": [["2000-11-01 01:00:00", "2000-12-31 00:00:00"]]},
   "sites": ["SE1", "SE2", "SE3", "SE4"],
   "features": ["WindSpeed_1", "WindSpeed_2", "WindSpeed_3", "WindSpeed_4",
                "WindDirection_1", "WindDirection_2", "WindDirection_3", "WindDirection_4"],
