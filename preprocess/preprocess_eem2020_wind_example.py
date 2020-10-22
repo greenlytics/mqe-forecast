@@ -10,8 +10,16 @@ import pandas as pd
 import glob
 
 
-def load_data(path):
-    files = glob.glob(f"{path}/**/*.nc", recursive=True)
+def load_data(path, splits):
+    files = glob.glob(f"{path}/**/*.nc", recursive=True)    
+    # reduce the preprocessing to the reference times inside the splits
+    ref_times = pd.to_datetime([f[-15:-3] for f in files])
+    ref_time_indices_from_splits = np.unique(np.concatenate([ref_times.slice_indexer(start, end) 
+                                            for split_name, split_spec in splits.items() 
+                                                for start, end in split_spec]))
+    files = np.array(files)[ref_time_indices_from_splits].tolist()
+    files = sorted(files)
+    
     ds = xr.open_mfdataset(files, parallel=True)
     ds_subset = ds.isel(x=slice(0, 71, 20), y=slice(0, 169, 50), ensemble_member=[0, 1, 2]).compute()
 
@@ -40,7 +48,7 @@ def preprocess_wind(ds_weather, df_production, target, features):
                          index=df.index,
                          columns=pd.MultiIndex.from_product([df_production.columns, df.columns]))
     # add the production target
-    df_production /= df_production.max(axis=0)
+
     for area in df_production.columns:
         df.loc[:, (area, target)] = df_production[area].reindex(index=df.index.get_level_values("valid_datetime")).values
 
@@ -61,7 +69,7 @@ if __name__ == '__main__':
     with open(params_path, 'r', encoding='utf-8') as file:
         params_json = json.loads(file.read())
 
-    ds_weather, df_production = load_data(params_json['path_raw_data'])
+    ds_weather, df_production = load_data(params_json['path_raw_data'], params_json['splits'])
     df = preprocess_wind(ds_weather, df_production, params_json['target'], params_json['features'])
     save_data(params_json['path_preprocessed_data'], params_json['filename_preprocessed_data'], df)
     print('Wind track preprocessed data saved to: '+params_json['path_preprocessed_data']+params_json['filename_preprocessed_data'])
