@@ -13,13 +13,13 @@ import glob
 def load_data(path, splits):
     files = glob.glob(f"{path}/**/*.nc", recursive=True)    
     # reduce the preprocessing to the reference times inside the splits
-    ref_times = pd.to_datetime([f[-15:-3] for f in files])
+    ref_times = pd.to_datetime([f[-15:-3] for f in files]).tz_localize(None)    
     ref_time_indices_from_splits = np.unique(np.concatenate([ref_times.slice_indexer(start, end) 
                                             for split_name, split_spec in splits.items() 
                                                 for start, end in split_spec]))
     files = np.array(files)[ref_time_indices_from_splits].tolist()
     files = sorted(files)
-    
+
     ds = xr.open_mfdataset(files, parallel=True)
     ds_subset = ds.isel(x=slice(0, 71, 20), y=slice(0, 169, 50), ensemble_member=[0, 1, 2]).compute()
 
