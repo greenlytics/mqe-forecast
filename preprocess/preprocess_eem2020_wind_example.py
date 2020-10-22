@@ -13,14 +13,16 @@ import glob
 def load_data(path, splits):
     files = glob.glob(f"{path}/**/*.nc", recursive=True)    
     # reduce the preprocessing to the reference times inside the splits
-    ref_times = pd.to_datetime([f[-15:-3] for f in files]).tz_localize(None)    
-    ref_time_indices_from_splits = np.unique(np.concatenate([ref_times.slice_indexer(start, end) 
-                                            for split_name, split_spec in splits.items() 
-                                                for start, end in split_spec]))
+    ref_times = [pd.to_datetime(f[-15:-3]).to_numpy() for f in files]
+    ref_time_indices_from_splits = np.unique(
+                                    np.concatenate([
+                                        np.where((pd.to_datetime(start).to_numpy()<=ref_times) & (ref_times<pd.to_datetime(end).to_numpy()))[0]
+                                             for split_name, split_spec in splits.items()
+                                                  for start, end in split_spec]))
     files = np.array(files)[ref_time_indices_from_splits].tolist()
     files = sorted(files)
 
-    ds = xr.open_mfdataset(files, parallel=True)
+    ds = xr.open_mfdataset(files, engine='h5netcdf', parallel=True)
     ds_subset = ds.isel(x=slice(0, 71, 20), y=slice(0, 169, 50), ensemble_member=[0, 1, 2]).compute()
 
     df_production = pd.read_csv(f"{path}/windpower_task0_updated.csv", index_col=0, parse_dates=[0])
