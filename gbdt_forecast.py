@@ -21,13 +21,6 @@ with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     import lightgbm as lgb
 
-def load_data(path_data):
-    # Load preprocessed data
-
-    df = pd.read_csv(path_data, header=[0,1], index_col=[0,1], parse_dates=True)
-
-    return df
-
 class Trial():
     def __init__(self, params_json):
         self.params_json = params_json
@@ -37,7 +30,7 @@ class Trial():
         self.trial_comment = params_json['trial_comment']
         self.path_result = params_json['path_result']
         self.path_preprocessed_data = params_json['path_preprocessed_data']
-        self.splits = params_json['splits']
+        self.filename_preprocessed_data = params_json['filename_preprocessed_data']
         self.sites = params_json['sites']
         self.features = params_json['features']
         self.target = params_json['target']
@@ -75,28 +68,52 @@ class Trial():
             self.train_only_zenith_angle_below = params_json['train_only_zenith_angle_below']
         else: 
             self.train_only_zenith_angle_below = False
-        if 'weight_params' in params_json: 
-            self.weight_params = params_json['weight_params']
+        if 'time_weight_params' in params_json: 
+            self.time_weight_params = params_json['time_weight_params']
         else:
-            self.weight_params = False
-        # Checks
+            self.time_weight_params = False
+        if 'target_level_weight_params' in params_json: 
+            self.target_level_weight_params = params_json['target_level_weight_params']
+        else:
+            self.target_level_weight_params = False     
+        if 'custom_weight_params' in params_json: 
+            self.custom_weight_params = params_json['custom_weight_params']
+        else:
+            self.custom_weight_params = False   
+
+        if self.datetime_splits: 
+            self.splits = params_json['splits']
+        elif self.train_test_splits:
         
-        # runtime
+        elif self.crossvalidation_splits:
+
+        else:
+            raise ValueError('One of `datetime_splits`, `train_test_splits` or `crossvalidation_splits` must be given in params_json.')
+
+        # Runtime
         self.parallel_backend = params_json.get("parallel_backend", "threading")
- 
+
+
+    def load_data(self):
+        # Load preprocessed data
+        path_data = self.path_preprocessed_data+self.filename_preprocessed_data
+        df = pd.read_csv(path_data, header=[0,1], index_col=[0,1], parse_dates=True)
+
+        return df
+
 
     def generate_dataset(self, df, split, site): 
 
         def add_lags(df, variables_lags): 
             # Lagged features
-            vspec = pd.DataFrame([(k, lag) for k, v in variables_lags.items() for lag in v],
-                                 columns=["Variable", "Lag"])\
-                              .set_index("Variable")\
-                              .sort_values("Lag")
+            vspec = pd.DataFrame([(k, lag) for k, v in variables_lags.items() for lag in v], columns=["Variable", "Lag"]) \
+                                 .set_index("Variable") \
+                                 .sort_values("Lag")
             for lag, variables in vspec.groupby("Lag").groups.items():
                 shifted = df.loc[:, sorted(variables)].groupby('ref_datetime').shift(lag)
                 shifted.columns = ['%s_lag%s' % (variable, lag) for variable in sorted(variables)]
                 df = pd.concat([df, shifted], axis=1)
+
             return df
 
         # Make target into list if not already
@@ -127,15 +144,37 @@ class Trial():
         # Use mean window to smooth target
         df_model[self.target] = df_model[self.target].rolling(self.target_smoothing_window, win_type='boxcar', center=True, min_periods=0).mean()
 
-        # Apply sample weighting
-        if self.weight_params:
-            weight_end = self.weight_params['weight_end']
-            weight_shape = self.weight_params['weight_shape']
+        # Apply time-based sample weighting
+        if self.time_weight_params:
+            weight_end = self.time_weight_params['weight_end']
+            weight_shape = self.time_weight_params['weight_shape']
             valid_times = df_model.index.get_level_values('valid_datetime')
             days = np.array((valid_times[-1]-valid_times).total_seconds()/(60*60*24))
-            weight = (1-weight_end)*np.exp(-days/weight_shape)+weight_end
+            time_weight = (1-weight_end)*np.exp(-days/weight_shape)+weight_end
         else:
-            weight = None
+            time_weight = 1
+
+        # Apply target level-based sample weighting
+        if self.target_level_weight_params:
+            weight_end = self.target_level_weight_params['weight_end']
+            weight_shape = self.target_level_weight_params['weight_shape']
+            target = df_model[self.target]
+            target_min = target.min()
+            target_max = target.max()
+            b = (1-weight_end)/(np.exp(-target_min/weight_shape)-np.exp(-target_max/weight_shape))
+            a = weight_end+b*np.exp(-target_min/weight_shape)
+            level_weight = a-b*np.exp(-target/weight_shape)
+        else: 
+            level_weight = 1
+
+        # Apply custom sample weighting
+        if self.custom_weight_params:
+            df_custom_weight = df[self.custom_weight_params['column']]
+            custom_weight = df_custom_weight[df_model.index].values
+        else:
+            custom_weight = 1
+
+        weight = time_weight*level_weight*custom_weight
 
         return df_X, df_y, df_model, weight
 
@@ -644,6 +683,6 @@ if __name__ == '__main__':
     with open(params_path, 'r', encoding='utf-8') as file:
         params_json = json.loads(file.read())
 
-    df = load_data(params_json['path_preprocessed_data']+params_json['filename_preprocessed_data'])
     trial = Trial(params_json)
+    df = trial.load_data()
     trial.run(df)
