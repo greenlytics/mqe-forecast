@@ -29,6 +29,7 @@ class Trial():
         self.trial_name = params_json['trial_name']
         self.trial_comment = params_json['trial_comment']
         self.path_result = params_json['path_result']
+        self.trial_path = self.path_result+self.trial_name
         self.path_preprocessed_data = params_json['path_preprocessed_data']
         self.filename_preprocessed_data = params_json['filename_preprocessed_data']
         self.sites = params_json['sites']
@@ -45,10 +46,10 @@ class Trial():
                                         'n_workers': 1}
             
         if 'quantile' in self.regression_params['type']:
-            alpha_q = np.arange(self.regression_params['alpha_range'][0],
-                                self.regression_params['alpha_range'][1],
-                                self.regression_params['alpha_range'][2])
-            if len(alpha_q) == 0: 
+            self.alpha_q = np.arange(self.regression_params['alpha_range'][0],
+                                     self.regression_params['alpha_range'][1],
+                                     self.regression_params['alpha_range'][2])
+            if len(self.alpha_q) == 0: 
                 raise ValueError('Number of quantiles needs to be larger than zero.')
 
         # Optional input variables
@@ -81,12 +82,14 @@ class Trial():
         else:
             self.custom_weight_params = False   
 
-        if self.datetime_splits: 
-            self.splits = params_json['splits']
-        elif self.train_test_splits:
-        
-        elif self.crossvalidation_splits:
+        if 'datetime_splits' in params_json: 
+            self.datetime_splits = params_json['datetime_splits']
+            self.splits = params_json['datetime_splits']
 
+        elif 'train_test_splits' in params_json:
+            pass
+        elif 'crossvalidation_splits' in params_json:
+            pass
         else:
             raise ValueError('One of `datetime_splits`, `train_test_splits` or `crossvalidation_splits` must be given in params_json.')
 
@@ -232,32 +235,33 @@ class Trial():
 
         return train_set, valid_sets
 
-    def train_on_objective(self, train_set, valid_sets, model, objective='mean', alpha=None):
+    def train_on_objective(self, df_model_train, model, objective='mean', alpha=None, df_model_valid=None, weight=None):
 
         if model == 'lightgbm':
-            with warnings.catch_warnings():
-                if self.model_params['lightgbm']['verbose'] == -1: 
-                    warnings.simplefilter("ignore")
-                if objective == 'mean': 
-                    objective_lgb = 'mean_squared_error'
-                    eval_key_name = 'l2'
-                elif objective == 'quantile': 
-                    objective_lgb = 'quantile'
-                    eval_key_name = 'quantile'
-                    self.model_params['lightgbm']['alpha'] = alpha
-                else: 
-                    raise ValueError("'objective' for lightgbm must be either 'mean' or 'quantile'")
-                self.model_params['lightgbm']['objective'] = objective_lgb
-                
-                evals_result = {}
-                gbm = lgb.train(self.model_params['lightgbm'],
-                                train_set,
-                                valid_sets=valid_sets,
-                                valid_names=None,
-                                evals_result=evals_result,
-                                verbose_eval=False,
-                                callbacks=None)
-                evals_result = {key: value[eval_key_name] for key, value in evals_result.items()}
+            if objective == 'mean': 
+                objective_lgb = 'mean_squared_error'
+                eval_key_name = 'l2'
+            elif objective == 'quantile': 
+                objective_lgb = 'quantile'
+                eval_key_name = 'quantile'
+                self.model_params['lightgbm']['alpha'] = alpha
+            else: 
+                raise ValueError("'objective' for lightgbm must be either 'mean' or 'quantile'")
+            self.model_params['lightgbm']['objective'] = objective_lgb
+                            
+            gbm = lgb.LGBMRegressor(**self.model_params['lightgbm'])
+            gbm.fit(df_model_train[self.features],
+                    df_model_train[[self.target]],
+                    sample_weight=weight,
+                    eval_set=[(df_model_valid[self.features], df_model_valid[[self.target]])],
+                    eval_names=None,
+                    eval_metric=objective_lgb,
+                    early_stopping_rounds=None,
+                    verbose=False,
+                    categorical_feature='auto', #TODO Change to pass this parameter explicitly
+                    callbacks=None)
+
+            evals_result = {key: value[eval_key_name] for key, value in gbm.evals_result_.items()}
 
         elif model == 'xgboost':
             if objective == 'mean': 
@@ -308,29 +312,28 @@ class Trial():
         
         return gbm, evals_result
 
-    def train(self, train_set, valid_sets, model): 
+    def train(self, df_model_train, model, df_model_valid=None, weight=None): 
 
         gbm_q, evals_result_q = {}, {}
         if 'mean' in self.regression_params['type']:
             # Train model for mean
-            gbm, evals_result = self.train_on_objective(train_set, valid_sets, model, objective='mean')
-
+            gbm, evals_result = self.train_on_objective(df_model_train, model, objective='mean', df_model_valid=df_model_valid, weight=weight)
             gbm_q['mean'] = gbm
             evals_result_q['mean'] = evals_result #TODO change this similarly to quantile case. 
 
         if 'quantile' in self.regression_params['type']:
             # Train models for different quantiles
-            alpha_q = np.arange(self.regression_params['alpha_range'][0],
-                                self.regression_params['alpha_range'][1],
-                                self.regression_params['alpha_range'][2])
-
             with joblib.parallel_backend(self.parallel_processing['backend']):
                 results = joblib.Parallel(n_jobs=self.parallel_processing['n_workers'])(
-                                joblib.delayed(self.train_on_objective)(
-                                    train_set, valid_sets,
-                                    model, objective='quantile', alpha=alpha)
-                                    for alpha in alpha_q)
-            for (gbm, evals_result), alpha in zip(results, alpha_q):
+                            joblib.delayed(self.train_on_objective)(df_model_train,
+                                                                        model,
+                                                                        objective='quantile',
+                                                                        alpha=alpha,
+                                                                        df_model_valid=df_model_valid, 
+                                                                        weight=weight)
+                            for alpha in self.alpha_q)
+
+            for (gbm, evals_result), alpha in zip(results, self.alpha_q):
                 gbm_q['quantile{0:.2f}'.format(alpha)] = gbm
                 evals_result_q['quantile{0:.2f}'.format(alpha)] = evals_result
 
@@ -362,8 +365,8 @@ class Trial():
                             weight = None
 
                         
-                        train_set, valid_sets = self.build_model_dataset(df_model_train, model, df_model_valid=df_model_valid, weight=weight)
-                        gbm_q, evals_result_q = self.train(train_set, valid_sets, model) #TODO Make it possible to train starting from an existing model. E.g. LightGBM has a `input_model` option. 
+                        #train_set, valid_sets = self.build_model_dataset(df_model_train, model, df_model_valid=df_model_valid, weight=weight)
+                        gbm_q, evals_result_q = self.train(df_model_train, model, df_model_valid=df_model_valid, weight=weight) #TODO Make it possible to train starting from an existing model. E.g. LightGBM has a `input_model` option. 
 
                         #TODO Add support for categorical_features. 
                         gbm_site.append(gbm_q)
@@ -412,10 +415,7 @@ class Trial():
             columns.append('mean')
 
         if 'quantile' in self.regression_params['type']:
-            alpha_q = np.arange(self.regression_params['alpha_range'][0],
-                                self.regression_params['alpha_range'][1],
-                                self.regression_params['alpha_range'][2])
-            columns.extend(['quantile{0}'.format(int(round(100*alpha))) for alpha in alpha_q])
+            columns.extend(['quantile{0}'.format(int(round(100*alpha))) for alpha in self.alpha_q])
         
         df_index = pd.DataFrame(index=df_X.index, columns=columns)
 
@@ -456,7 +456,7 @@ class Trial():
             elif self.regression_params['quantile_postprocess'] == 'isotonic_regression': 
                 # Isotonic regression
                 regressor = IsotonicRegression()
-                y_pred_q = np.stack([regressor.fit_transform(alpha_q, y_pred_q[sample,:]) for sample in range(idx_q_start, y_pred_q.shape[0])])                    
+                y_pred_q = np.stack([regressor.fit_transform(self.alpha_q, y_pred_q[sample,:]) for sample in range(idx_q_start, y_pred_q.shape[0])])                    
 
         # Create prediction output dataframe
         df_y_pred_q = df_index
@@ -494,65 +494,56 @@ class Trial():
         return dfs_y_pred_model
 
 
-    def calculate_loss(self, dfs_y_true_split, dfs_y_pred_model):
+    def calculate_loss(self, df_y_true, df_y_pred): 
 
-        print('Calculating loss...')
         if 'mean' in self.regression_params['type']:
-
-            dfs_loss_model = {}
-            for model in self.model_params.keys():
-                dfs_loss_split = []
-                dfs_y_pred_split = dfs_y_pred_model[model]
-                for dfs_y_true_site, dfs_y_pred_site in zip(dfs_y_true_split, dfs_y_pred_split):
-                    dfs_loss_site = []
-                    for df_y_true, df_y_pred in zip(dfs_y_true_site, dfs_y_pred_site):
-                        y_true = df_y_true[[self.target]].values
-                        y_pred = df_y_pred.values
-
-                        loss = (y_pred-y_true)**2
-
-                        df_loss = pd.DataFrame(data=loss, index=df_y_pred.index, columns=df_y_pred.columns)
-                        
-                        dfs_loss_site.append(df_loss)
-
-                    dfs_loss_split.append(dfs_loss_site)
-
-                dfs_loss_model[model] = dfs_loss_split
+            y_true = df_y_true[[self.target]].values
+            y_pred = df_y_pred['mean'].values
+            loss = (y_pred-y_true)**2
+            df_loss_mean = pd.DataFrame(data=loss, index=df_y_pred.index, columns=['mean'])
+        else:
+            df_loss_mean = None
 
         if 'quantile' in self.regression_params['type']:
-            # Evaluation using pinball loss function
+            a = self.alpha_q.reshape(1,-1)
+            y_true = df_y_true[[self.target]].values
+            y_pred = df_y_pred.filter(regex='quantile').values
 
-            alpha_q = np.arange(self.regression_params['alpha_range'][0],
-                                self.regression_params['alpha_range'][1],
-                                self.regression_params['alpha_range'][2])
-            a = alpha_q.reshape(1,-1)
+            # Pinball loss with nan if true label is nan
+            with np.errstate(invalid='ignore'):
+                loss = np.where(np.isnan(y_true),
+                                np.nan,
+                                np.where(y_true < y_pred,
+                                        (1-a)*(y_pred-y_true),
+                                        a*(y_true-y_pred)))
 
-            dfs_loss_model = {}
-            for model in self.model_params.keys():
+                df_loss_quantile = pd.DataFrame(data=loss, index=df_y_pred.index, columns=df_y_pred.filter(regex='quantile').columns)
+        else:
+            df_loss_quantile = None
+        
+        df_loss = pd.concat([df_loss_mean, df_loss_quantile], axis=1)
+    
+        return df_loss
 
-                dfs_loss_split = []
-                dfs_y_pred_split = dfs_y_pred_model[model]
-                for dfs_y_true_site, dfs_y_pred_site in zip(dfs_y_true_split, dfs_y_pred_split):
-                    dfs_loss_site = []
-                    for df_y_true, df_y_pred in zip(dfs_y_true_site, dfs_y_pred_site):
-                        y_true = df_y_true[[self.target]].values
-                        y_pred = df_y_pred.values
+    def calculate_loss_split_site(self, dfs_y_true_split, dfs_y_pred_model):
 
-                        # Pinball loss with nan if true label is nan
-                        with np.errstate(invalid='ignore'):
-                            loss = np.where(np.isnan(y_true),
-                                            np.nan,
-                                            np.where(y_true < y_pred,
-                                                    (1-a)*(y_pred-y_true),
-                                                    a*(y_true-y_pred)))
+        print('Calculating loss...')
 
-                            df_loss = pd.DataFrame(data=loss, index=df_y_pred.index, columns=df_y_pred.columns)
+        dfs_loss_model = {}
+        for model in self.model_params.keys():
+            dfs_loss_split = []
+            dfs_y_pred_split = dfs_y_pred_model[model]
+            for dfs_y_true_site, dfs_y_pred_site in zip(dfs_y_true_split, dfs_y_pred_split):
+                dfs_loss_site = []
+                for df_y_true, df_y_pred in zip(dfs_y_true_site, dfs_y_pred_site):
 
-                        dfs_loss_site.append(df_loss)
+                    df_loss = self.calculate_loss(df_y_true, df_y_pred)
+                    
+                    dfs_loss_site.append(df_loss)
 
-                    dfs_loss_split.append(dfs_loss_site)
+                dfs_loss_split.append(dfs_loss_site)
 
-                dfs_loss_model[model] = dfs_loss_split
+            dfs_loss_model[model] = dfs_loss_split
         
         return dfs_loss_model
 
@@ -566,54 +557,64 @@ class Trial():
 
         return score_model
 
+    def save_json(self):
+        if os.path.exists(self.trial_path):
+            shutil.rmtree(self.trial_path)
+        os.makedirs(self.trial_path)
+
+        file_name_json = '/params_'+self.trial_name+'.json'
+        with open(self.trial_path+file_name_json, 'w') as file:
+            json.dump(params_json, file, indent=4)
+
+    def save_data_prediction_evals_loss(self, df, key, model, split, site): 
+        file_name = key+'_'+model+'_split_{0}_site_{1}.csv'.format(split, site)
+        df.to_csv(self.trial_path+'/'+key+'/'+file_name)
+
+    def save_model(self, gbm_q, key, model, split, site):
+        for q in gbm_q.keys():
+            gbm = gbm_q[q]
+            if model in ['lightgbm', 'xgboost', 'catboost']: 
+                file_name = key+'_'+model+'_q_'+q+'_split_{0}_site_{1}.txt'.format(split, site)
+                gbm.booster_.save_model(self.trial_path+'/'+key+'/'+file_name)
+            if model == 'skboost': 
+                file_name = key+'_'+model+'_q_'+q+'_split_{0}_site_{1}.pkl'.format(split, site)
+                with open(self.trial_path+'/'+key+'/'+file_name, 'wb') as f:
+                    pickle.dump(gbm, f)
 
     def save_result(self, params_json, result_data, result_prediction, result_model, result_evals, result_loss):
 
         print('Saving results...')
-        trial_path = self.path_result+self.trial_name
-        if os.path.exists(trial_path):
-            shutil.rmtree(trial_path)
-        os.makedirs(trial_path)
-
-        file_name_json = '/params_'+self.trial_name+'.json'
-        with open(trial_path+file_name_json, 'w') as file:
-            json.dump(params_json, file, indent=4)
+        self.save_json()
 
         if self.save_options['data'] == True:
             for key in result_data.keys():
-                os.makedirs(trial_path+'/'+key)
+                os.makedirs(self.trial_path+'/'+key)
                 for split in range(len(result_data[key])):
-                    file_name = key+'_split_{0}.csv'.format(split)
                     df = pd.concat(result_data[key][split], axis=1, keys=self.sites)
-                    df.to_csv(trial_path+'/'+key+'/'+file_name)
+                    self.save_data_prediction_evals_loss(df, key, 'none', split, 'all') 
+ 
         if self.save_options['prediction'] == True:
             for key in result_prediction.keys():
-                os.makedirs(trial_path+'/'+key)
+                os.makedirs(self.trial_path+'/'+key)
                 for model in self.model_params.keys():
                     for split in range(len(result_prediction[key][model])):
-                            file_name = key+'_'+model+'_split_{0}.csv'.format(split)
-                            df = pd.concat(result_prediction[key][model][split], axis=1, keys=self.sites)
-                            df.to_csv(trial_path+'/'+key+'/'+file_name)
+                        df = pd.concat(result_prediction[key][model][split], axis=1, keys=self.sites)
+                        self.save_data_prediction_evals_loss(df, key, model, split, 'all')      
+
         if self.save_options['model'] == True:
             for key in result_model.keys():
-                os.makedirs(trial_path+'/'+key)
+                os.makedirs(self.trial_path+'/'+key)
                 for model in self.model_params.keys():
                     for split in range(len(result_model[key][model])):
                         for site in range(len(result_model[key][model][0])):
-                            for q in result_model[key][model][0][0].keys():
-                                if model in ['lightgbm', 'xgboost', 'catboost']: 
-                                    file_name = key+'_'+model+'_q_'+q+'_split_{0}_site_{1}.txt'.format(split, site)
-                                    result_model[key][model][split][site][q].save_model(trial_path+'/'+key+'/'+file_name)
-                                if model == 'skboost': 
-                                    file_name = key+'_'+model+'_q_'+q+'_split_{0}_site_{1}.pkl'.format(split, site)
-                                    with open(trial_path+'/'+key+'/'+file_name, 'wb') as f:
-                                        pickle.dump(result_model[key][model][split][site][q], f)
+                            gbm_q = result_model[key][model][split][site]
+                            self.save_model(gbm_q, key, model, split, site)
+
         if self.save_options['evals'] == True:
             for key in result_evals.keys():
-                os.makedirs(trial_path+'/'+key)
+                os.makedirs(self.trial_path+'/'+key)
                 for model in self.model_params.keys():
                     for split in range(len(result_evals[key][model])):
-                        file_name = key+'_'+model+'_split_{0}.csv'.format(split)
                         data = result_evals[key][model][split]
                         data = {(level1_key, level2_key, level3_key): pd.Series(values)
                                 for level1_key, level2_dict in zip(self.sites,data)
@@ -621,15 +622,16 @@ class Trial():
                                 for level3_key, values in level3_dict.items()}
                         df = pd.DataFrame(data)
                         df.index.name = 'trees'
-                        df.to_csv(trial_path+'/'+key+'/'+file_name)
+                        self.save_data_prediction_evals_loss(df, key, model, split, 'all')      
+
         if self.save_options['loss'] == True:
             for key in result_loss.keys():
-                os.makedirs(trial_path+'/'+key)
+                os.makedirs(self.trial_path+'/'+key)
                 for model in self.model_params.keys():
-                    for split in range(len(result_loss[key][model])):      
-                        file_name = key+'_'+model+'_split_{0}.csv'.format(split)
-                        df_loss = pd.concat(result_loss[key][model][split], axis=1, keys=self.sites)
-                        df_loss.to_csv(trial_path+'/'+key+'/'+file_name)
+                    for split in range(len(result_loss[key][model])):
+                        df = pd.concat(result_loss[key][model][split], axis=1, keys=self.sites)
+                        self.save_data_prediction_evals_loss(df, key, model, split, 'all')      
+
         if self.save_options['overall_score'] == True:
             score_train_model = self.calculate_score(result_loss['dfs_loss_train'])
             score_valid_model = self.calculate_score(result_loss['dfs_loss_valid'])
@@ -645,7 +647,7 @@ class Trial():
         else:
             score_train_model = None
             score_valid_model = None
-        print('Results saved to: '+trial_path)
+        print('Results saved to: '+self.trial_path)
 
         return score_train_model, score_valid_model
 
@@ -660,24 +662,70 @@ class Trial():
         dfs_y_pred_train_model = self.predict_model_split_site(dfs_X_train_split, gbm_model)
         dfs_y_pred_valid_model = self.predict_model_split_site(dfs_X_valid_split, gbm_model)
 
-        dfs_loss_train_model = self.calculate_loss(dfs_y_train_split, dfs_y_pred_train_model)
-        dfs_loss_valid_model = self.calculate_loss(dfs_y_valid_split, dfs_y_pred_valid_model)
+        dfs_loss_train_model = self.calculate_loss_split_site(dfs_y_train_split, dfs_y_pred_train_model)
+        dfs_loss_valid_model = self.calculate_loss_split_site(dfs_y_valid_split, dfs_y_pred_valid_model)
 
         result_data = {'dfs_X_train': dfs_X_train_split,
-                    'dfs_X_valid': dfs_X_valid_split,
-                    'dfs_y_train': dfs_y_train_split,
-                    'dfs_y_valid': dfs_y_valid_split}
+                       'dfs_X_valid': dfs_X_valid_split,
+                       'dfs_y_train': dfs_y_train_split,
+                       'dfs_y_valid': dfs_y_valid_split}
         result_model = {'gbm_model': gbm_model}
         result_evals = {'evals_result': evals_result_model}
         result_prediction = {'dfs_y_pred_train': dfs_y_pred_train_model,
-                                'dfs_y_pred_valid': dfs_y_pred_valid_model}
+                             'dfs_y_pred_valid': dfs_y_pred_valid_model}
         result_loss = {'dfs_loss_train': dfs_loss_train_model,
-                    'dfs_loss_valid': dfs_loss_valid_model}
+                       'dfs_loss_valid': dfs_loss_valid_model}
 
         score_train_model, score_valid_model = self.save_result(self.params_json, result_data, result_prediction, result_model, result_evals, result_loss)
 
         return score_train_model, score_valid_model
-    
+
+    def run_parallel(self, df):
+        print('Running trial pipeline for trial: {0}...'.format(self.trial_name))
+
+        self.save_json()
+        os.makedirs(self.trial_path+'/'+'gbm_model')
+        os.makedirs(self.trial_path+'/'+'df_y_pred_train')
+        os.makedirs(self.trial_path+'/'+'df_y_pred_valid')
+        os.makedirs(self.trial_path+'/'+'df_loss_train')
+        os.makedirs(self.trial_path+'/'+'df_loss_valid')
+        os.makedirs(self.trial_path+'/'+'df_X_train')
+        os.makedirs(self.trial_path+'/'+'df_X_valid')
+        os.makedirs(self.trial_path+'/'+'df_y_train')
+        os.makedirs(self.trial_path+'/'+'df_y_valid')
+
+        with tqdm(total=len(self.splits['train'])*len(self.sites)) as pbar:
+            for split_idx, (split_train, split_valid) in enumerate(zip(self.splits['train'], self.splits['valid'])):
+                dfs_X_site, dfs_y_site, dfs_model_site, weight_site = [], [], [], []
+                for site in self.sites:
+                    
+                    df_X_train, df_y_train, df_model_train, weight = self.generate_dataset(df, split_train, site)
+                    df_X_valid, df_y_valid, df_model_valid, _ = self.generate_dataset(df, split_train, site)
+
+                    for model in self.model_params.keys():
+
+                        gbm_q, evals_result_q = self.train(df_model_train, model, df_model_valid=df_model_valid, weight=weight)
+
+                        df_y_pred_train = self.predict(df_X_train, gbm_q, model)
+                        df_y_pred_valid = self.predict(df_X_valid, gbm_q, model)
+
+                        df_loss_train = self.calculate_loss(df_y_train, df_y_pred_train)
+                        df_loss_valid = self.calculate_loss(df_y_valid, df_y_pred_valid)
+
+                        self.save_model(gbm_q, 'gbm_model', model, split_idx, site)
+                        #self.save_data_prediction_evals_loss(evals_result_q, key, model, split, 'all')      
+                        self.save_data_prediction_evals_loss(df_y_pred_train, 'df_y_pred_train', model, split_idx, site)
+                        self.save_data_prediction_evals_loss(df_y_pred_valid, 'df_y_pred_valid', model, split_idx, site)
+                        self.save_data_prediction_evals_loss(df_loss_train, 'df_loss_train', model, split_idx, site)
+                        self.save_data_prediction_evals_loss(df_loss_valid, 'df_loss_valid', model, split_idx, site)
+
+                        pbar.update(1)
+
+                    self.save_data_prediction_evals_loss(df_X_train, 'df_X_train', 'none', split_idx, site)      
+                    self.save_data_prediction_evals_loss(df_X_valid, 'df_X_valid', 'none', split_idx, site)      
+                    self.save_data_prediction_evals_loss(df_y_train, 'df_y_train', 'none', split_idx, site)      
+                    self.save_data_prediction_evals_loss(df_y_valid, 'df_y_valid', 'none', split_idx, site)           
+
 if __name__ == '__main__':
     params_path = sys.argv[1]
     with open(params_path, 'r', encoding='utf-8') as file:
@@ -685,4 +733,4 @@ if __name__ == '__main__':
 
     trial = Trial(params_json)
     df = trial.load_data()
-    trial.run(df)
+    trial.run_parallel(df)
