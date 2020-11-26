@@ -20,7 +20,7 @@
     {"type": ["quantile"],
      "alpha_range": [0.01, 1.0, 0.01], 
      "quantile_postprocess": "sorting",
-     "target_min_max": [0, 1]},
+     "target_min_max": [0, 1000]},
   "model_params":
       {"lightgbm":
        {
@@ -47,7 +47,7 @@
   "save_options":
      {"data": false,
       "prediction": false,
-      "model": false,
+      "model": true,
       "evals": false,
       "loss": true,
       "overall_score": true}

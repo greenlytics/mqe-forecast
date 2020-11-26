@@ -684,47 +684,67 @@ class Trial():
         print('Running trial pipeline for trial: {0}...'.format(self.trial_name))
 
         self.save_json()
-        os.makedirs(self.trial_path+'/'+'gbm_model')
-        os.makedirs(self.trial_path+'/'+'df_y_pred_train')
-        os.makedirs(self.trial_path+'/'+'df_y_pred_valid')
-        os.makedirs(self.trial_path+'/'+'df_loss_train')
-        os.makedirs(self.trial_path+'/'+'df_loss_valid')
-        os.makedirs(self.trial_path+'/'+'df_X_train')
-        os.makedirs(self.trial_path+'/'+'df_X_valid')
-        os.makedirs(self.trial_path+'/'+'df_y_train')
-        os.makedirs(self.trial_path+'/'+'df_y_valid')
+        
+        if self.save_options['model'] == True:
+            os.makedirs(self.trial_path+'/'+'gbm_model')
+        if self.save_options['prediction'] == True:
+            os.makedirs(self.trial_path+'/'+'df_y_pred_train')
+            os.makedirs(self.trial_path+'/'+'df_y_pred_valid')
+        if self.save_options['loss'] == True:
+            os.makedirs(self.trial_path+'/'+'df_loss_train')
+            os.makedirs(self.trial_path+'/'+'df_loss_valid')
+        if self.save_options['data'] == True:
+            os.makedirs(self.trial_path+'/'+'df_X_train')
+            os.makedirs(self.trial_path+'/'+'df_X_valid')
+            os.makedirs(self.trial_path+'/'+'df_y_train')
+            os.makedirs(self.trial_path+'/'+'df_y_valid')
+
+  
+        def train_site(df, split_idx, split_train, split_valid, site, pbar):
+            df_X_train, df_y_train, df_model_train, weight = self.generate_dataset(df, split_train, site)
+            df_X_valid, df_y_valid, df_model_valid, _ = self.generate_dataset(df, split_train, site)
+
+            for model in self.model_params.keys():
+
+                gbm_q, evals_result_q = self.train(df_model_train, model, df_model_valid=df_model_valid, weight=weight)
+
+                df_y_pred_train = self.predict(df_X_train, gbm_q, model)
+                df_y_pred_valid = self.predict(df_X_valid, gbm_q, model)
+
+                df_loss_train = self.calculate_loss(df_y_train, df_y_pred_train)
+                df_loss_valid = self.calculate_loss(df_y_valid, df_y_pred_valid)
+
+                if self.save_options['model'] == True:
+                    self.save_model(gbm_q, 'gbm_model', model, split_idx, site)
+                if self.save_options['prediction'] == True:
+                    self.save_data_prediction_evals_loss(df_y_pred_train, 'df_y_pred_train', model, split_idx, site)
+                    self.save_data_prediction_evals_loss(df_y_pred_valid, 'df_y_pred_valid', model, split_idx, site)
+                if self.save_options['evals'] == True:
+                    self.save_data_prediction_evals_loss(evals_result_q, key, model, split, 'all')
+                if self.save_options['loss'] == True:
+                    self.save_data_prediction_evals_loss(df_loss_train, 'df_loss_train', model, split_idx, site)
+                    self.save_data_prediction_evals_loss(df_loss_valid, 'df_loss_valid', model, split_idx, site)
+
+                pbar.update(1)
+
+            if self.save_options['data'] == True:
+                self.save_data_prediction_evals_loss(df_X_train, 'df_X_train', 'none', split_idx, site)      
+                self.save_data_prediction_evals_loss(df_X_valid, 'df_X_valid', 'none', split_idx, site)      
+                self.save_data_prediction_evals_loss(df_y_train, 'df_y_train', 'none', split_idx, site)      
+                self.save_data_prediction_evals_loss(df_y_valid, 'df_y_valid', 'none', split_idx, site) 
+
+            return True 
 
         with tqdm(total=len(self.splits['train'])*len(self.sites)) as pbar:
-            for split_idx, (split_train, split_valid) in enumerate(zip(self.splits['train'], self.splits['valid'])):
-                dfs_X_site, dfs_y_site, dfs_model_site, weight_site = [], [], [], []
-                for site in self.sites:
+            with joblib.parallel_backend(self.parallel_processing['backend']):
+                results = joblib.Parallel(n_jobs=self.parallel_processing['n_workers'])(
+                            joblib.delayed(train_site)(df, split_idx, split_train, split_valid, site, pbar)
+                            for split_idx, (split_train, split_valid) in enumerate(zip(self.splits['train'], self.splits['valid']))
+                                for site in self.sites)
+
+        print("Results: ", results)
                     
-                    df_X_train, df_y_train, df_model_train, weight = self.generate_dataset(df, split_train, site)
-                    df_X_valid, df_y_valid, df_model_valid, _ = self.generate_dataset(df, split_train, site)
-
-                    for model in self.model_params.keys():
-
-                        gbm_q, evals_result_q = self.train(df_model_train, model, df_model_valid=df_model_valid, weight=weight)
-
-                        df_y_pred_train = self.predict(df_X_train, gbm_q, model)
-                        df_y_pred_valid = self.predict(df_X_valid, gbm_q, model)
-
-                        df_loss_train = self.calculate_loss(df_y_train, df_y_pred_train)
-                        df_loss_valid = self.calculate_loss(df_y_valid, df_y_pred_valid)
-
-                        self.save_model(gbm_q, 'gbm_model', model, split_idx, site)
-                        #self.save_data_prediction_evals_loss(evals_result_q, key, model, split, 'all')      
-                        self.save_data_prediction_evals_loss(df_y_pred_train, 'df_y_pred_train', model, split_idx, site)
-                        self.save_data_prediction_evals_loss(df_y_pred_valid, 'df_y_pred_valid', model, split_idx, site)
-                        self.save_data_prediction_evals_loss(df_loss_train, 'df_loss_train', model, split_idx, site)
-                        self.save_data_prediction_evals_loss(df_loss_valid, 'df_loss_valid', model, split_idx, site)
-
-                        pbar.update(1)
-
-                    self.save_data_prediction_evals_loss(df_X_train, 'df_X_train', 'none', split_idx, site)      
-                    self.save_data_prediction_evals_loss(df_X_valid, 'df_X_valid', 'none', split_idx, site)      
-                    self.save_data_prediction_evals_loss(df_y_train, 'df_y_train', 'none', split_idx, site)      
-                    self.save_data_prediction_evals_loss(df_y_valid, 'df_y_valid', 'none', split_idx, site)           
+                           
 
 if __name__ == '__main__':
     params_path = sys.argv[1]
