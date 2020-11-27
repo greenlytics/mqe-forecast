@@ -256,9 +256,9 @@ class Trial():
                     eval_set=[(df_model_valid[self.features], df_model_valid[[self.target]])],
                     eval_names=None,
                     eval_metric=objective_lgb,
-                    early_stopping_rounds=None,
+                    early_stopping_rounds=self.model_params['lightgbm'].get("early_stopping", None),
                     verbose=False,
-                    categorical_feature='auto', #TODO Change to pass this parameter explicitly
+                    categorical_feature='', #TODO Change to pass this parameter explicitly
                     callbacks=None)
 
             evals_result = {key: value[eval_key_name] for key, value in gbm.evals_result_.items()}
@@ -363,7 +363,6 @@ class Trial():
                             weight = weight_train_split[idx_split][idx_site]
                         else:
                             weight = None
-
                         
                         #train_set, valid_sets = self.build_model_dataset(df_model_train, model, df_model_valid=df_model_valid, weight=weight)
                         gbm_q, evals_result_q = self.train(df_model_train, model, df_model_valid=df_model_valid, weight=weight) #TODO Make it possible to train starting from an existing model. E.g. LightGBM has a `input_model` option. 
@@ -702,7 +701,7 @@ class Trial():
   
         def train_site(df, split_idx, split_train, split_valid, site, pbar):
             df_X_train, df_y_train, df_model_train, weight = self.generate_dataset(df, split_train, site)
-            df_X_valid, df_y_valid, df_model_valid, _ = self.generate_dataset(df, split_train, site)
+            df_X_valid, df_y_valid, df_model_valid, _ = self.generate_dataset(df, split_valid, site)
 
             for model in self.model_params.keys():
 
