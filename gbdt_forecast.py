@@ -129,7 +129,7 @@ class Trial():
 
         # Add lagged variables
         if self.variables_lags is not None: 
-            df_X = add_lags(df_X, self.variables_lags)
+            df_X = add_lags(df_X, self.variables_lags)            
 
         # Remove samples where either all features are nan or target is nan
         is_nan = df_X.isna().all(axis=1) | df_y.isna().all(axis=1)
@@ -211,32 +211,34 @@ class Trial():
     def build_model_dataset(self, df_model_train, model, df_model_valid=None, weight=None): 
         # Build up dataset adapted to models
         train_set, valid_sets = {}, {}
+        all_features = [c for c in df_model_train.columns if c != self.target]
         if model == 'lightgbm':
-            train_set = lgb.Dataset(df_model_train[self.features], label=df_model_train[[self.target]], weight=weight, params={'verbose': -1}, free_raw_data=False)
+            train_set = lgb.Dataset(df_model_train[all_features], label=df_model_train[[self.target]], weight=weight, params={'verbose': -1}, free_raw_data=False)
             if df_model_valid is not None: 
-                valid_set = lgb.Dataset(df_model_valid[self.features], label=df_model_valid[[self.target]], params={'verbose': -1}, free_raw_data=False)
+                valid_set = lgb.Dataset(df_model_valid[all_features], label=df_model_valid[[self.target]], params={'verbose': -1}, free_raw_data=False)
                 valid_sets = [train_set, valid_set]
             else:
                 vaild_sets['lightgbm'] = [train_set_lgb]        
         elif model == 'xgboost':
-            train_set = xgb.DMatrix(df_model_train[self.features], label=df_model_train[[self.target]], weight=weight)
+            train_set = xgb.DMatrix(df_model_train[all_features], label=df_model_train[[self.target]], weight=weight)
             if df_model_valid is not None: 
-                valid_set = xgb.DMatrix(df_model_valid[self.features], label=df_model_valid[[self.target]])
+                valid_set = xgb.DMatrix(df_model_valid[all_features], label=df_model_valid[[self.target]])
                 valid_sets = [(train_set, 'train'), (valid_set, 'valid')]
             else: 
                 valid_sets = [(train_set, 'train')]   
         elif model == 'catboost':
-            train_set = cb.Pool(df_model_train[self.features], label=df_model_train[[self.target]], weight=weight)
+            train_set = cb.Pool(df_model_train[all_features], label=df_model_train[[self.target]], weight=weight)
             if df_model_valid is not None: 
-                valid_set = cb.Pool(df_model_valid[self.features], label=df_model_valid[[self.target]])
+                valid_set = cb.Pool(df_model_valid[all_features], label=df_model_valid[[self.target]])
                 valid_sets = [valid_set]      
         elif model == 'skboost' in self.model_params:
-            train_set = [df_model_train[self.features], df_model_train[self.target], weight]
+            train_set = [df_model_train[all_features], df_model_train[self.target], weight]
 
         return train_set, valid_sets
 
     def train_on_objective(self, df_model_train, model, objective='mean', alpha=None, df_model_valid=None, weight=None):
 
+        all_features = [c for c in df_model_train.columns if c != self.target]
         if model == 'lightgbm':
             if objective == 'mean': 
                 objective_lgb = 'mean_squared_error'
@@ -250,10 +252,10 @@ class Trial():
             self.model_params['lightgbm']['objective'] = objective_lgb
                             
             gbm = lgb.LGBMRegressor(**self.model_params['lightgbm'])
-            gbm.fit(df_model_train[self.features],
+            gbm.fit(df_model_train[all_features],
                     df_model_train[[self.target]],
                     sample_weight=weight,
-                    eval_set=[(df_model_valid[self.features], df_model_valid[[self.target]])],
+                    eval_set=[(df_model_valid[all_features], df_model_valid[[self.target]])],
                     eval_names=None,
                     eval_metric=objective_lgb,
                     early_stopping_rounds=self.model_params['lightgbm'].get("early_stopping", None),
@@ -429,14 +431,14 @@ class Trial():
         y_pred_q = []
         for q in gbm_q.keys():
             if model == 'lightgbm':
-                y_pred = gbm_q[q].predict(df_X[self.features])
+                y_pred = gbm_q[q].predict(df_X)
             elif model == 'xgboost': 
                 if self.regression_params['type'][0] == 'mean':
-                    y_pred = gbm_q[q].predict(xgb.DMatrix(df_X[self.features]))
+                    y_pred = gbm_q[q].predict(xgb.DMatrix(df_X))
             elif model == 'catboost': 
-                y_pred = gbm_q[q].predict(df_X[self.features])
+                y_pred = gbm_q[q].predict(df_X)
             elif model == 'skboost': 
-                y_pred = gbm_q[q].predict(df_X[self.features])
+                y_pred = gbm_q[q].predict(df_X)
             else:
                 raise ValueError()
 
@@ -497,7 +499,7 @@ class Trial():
 
         if 'mean' in self.regression_params['type']:
             y_true = df_y_true[[self.target]].values
-            y_pred = df_y_pred['mean'].values
+            y_pred = df_y_pred[['mean']].values
             loss = (y_pred-y_true)**2
             df_loss_mean = pd.DataFrame(data=loss, index=df_y_pred.index, columns=['mean'])
         else:
