@@ -19,6 +19,7 @@ import xgboost as xgb
 import catboost as cb
 from sklearn.experimental import enable_hist_gradient_boosting
 import sklearn as skl
+import statsmodels.api as sm
 
 from sklearn.isotonic import IsotonicRegression
 
@@ -93,9 +94,8 @@ class Trial(object):
 
         if 'datetime_splits' in params_json: 
             self.datetime_splits = params_json['datetime_splits']
-            self.splits = params_json['datetime_splits']
-        elif 'train_val_splits' in params_json:
-            pass
+        elif 'valid_fraction' in params_json:
+            self.valid_fraction = params_json['valid_fraction']
         elif 'cv_splits' in params_json:
             pass
         else:
@@ -115,6 +115,25 @@ class Trial(object):
         return df
 
 
+    def initial_checks(self, df):
+        if not all([feature in df.columns.levels[1] for feature in self.features]):
+            raise ValueError('All specified features are not present in data.')
+
+
+    def generate_splits(self, df):
+        # Build up splits dependent on input 
+
+        if hasattr(self, 'datetime_splits'):
+            self.splits = self.params_json['datetime_splits']
+        elif hasattr(self, 'valid_fraction'):
+            index = df.groupby('valid_datetime').first().index
+            n_index = len(index)
+            self.splits = {'train': [[[index[0], index[int((1-self.valid_fraction)*n_index)]]]],
+                           'valid': [[[index[int((1-self.valid_fraction)*n_index)+1], index[-1]]]]}
+        
+        return self.splits
+
+
     def generate_dataset(self, df, split=None): 
 
         def add_lags(df, feature_lags): 
@@ -126,6 +145,7 @@ class Trial(object):
             dfs_lag = []
             for lag, variables in vspec.groupby("Lag").groups.items():
                 df_lag = df.loc[:, sorted(variables)].groupby('ref_datetime').shift(lag)
+
                 df_lag.columns = ['%s_lag%s' % (variable, lag) for variable in sorted(variables)]
                 dfs_lag.append(df_lag)
 
@@ -136,12 +156,10 @@ class Trial(object):
             return df, lagged_features
 
         # Split up dataset in features and target
-        if split: 
-            df_X = pd.concat([df.loc[pd.IndexSlice[:, s[0]:s[1]], self.features] for s in split], axis=0).drop_duplicates(keep='first')
-            df_y = pd.concat([df.loc[pd.IndexSlice[:, s[0]:s[1]], [self.target]] for s in split], axis=0).drop_duplicates(keep='first')
-        else: 
-            df_X = df.loc[:, self.features]
-            df_y = df.loc[:, [self.target]]
+        if split:
+            df = pd.concat([df.loc[pd.IndexSlice[:, s[0]:s[1]], :] for s in split], axis=0).drop_duplicates(keep='first')
+        df_X = df.loc[:, self.features]
+        df_y = df.loc[:, [self.target]]
 
         # Add lagged variables
         if self.feature_lags is not None: 
@@ -227,9 +245,12 @@ class Trial(object):
 
         return dfs_X_split, dfs_y_split, dfs_model_split, weight_split
 
+
     def plot_splits(self, dfs_y_train_split, dfs_y_valid_split=None):
         n_splits = len(dfs_y_train_split)
         fig, axes = plt.subplots(nrows=n_splits, ncols=1, sharex=True, figsize=(20,2.5*n_splits))
+        axes = axes if isinstance(axes, list) else [axes]
+
         for i in range(n_splits):
             df_train = dfs_y_train_split[i][0].groupby('valid_datetime').first().resample('H').first()
             axes[i].plot(df_train.index, df_train.values, label='train')
@@ -238,6 +259,7 @@ class Trial(object):
                 axes[i].plot(df_valid.index, df_valid.values, label='valid')
             axes[i].set_title('split: {0}'.format(i+1))
             axes[i].legend()
+
 
     def create_fit_model(self, model_name, df_model_train, objective='mean', alpha=None, df_model_valid=None, weight=None):
         # Create and fit model. This method could potentially be split up in create and fit seperately. 
@@ -409,6 +431,37 @@ class Trial(object):
 
             evals_result = None # Not possible to return evals_result with current scikit-learn implementation.
 
+        elif model_name.split('_')[0] == 'skols':
+            df_temp = df_model_train.dropna()
+            model = sklearn.linear_model.LinearRegression()
+            model.result = model.fit(df_temp[[self.target]], df_temp[self.all_features])
+
+        elif model_name.split('_')[0] == 'sklasso':
+            df_temp = df_model_train.dropna()
+            model = sklearn.linear_model.Lasso()
+            model.result = model.fit(df_temp[[self.target]], df_temp[self.all_features])
+
+        elif model_name.split('_')[0] == 'skridge':
+            df_temp = df_model_train.dropna()
+            model = sklearn.linear_model.Ridge()
+            model.result = model.fit(df_temp[[self.target]], df_temp[self.all_features])
+
+        elif model_name.split('_')[0] == 'statquant':
+            # Need to standardise input
+            df_temp = df_model_train.dropna()
+            model = sm.QuantReg(df_temp[[self.target]], df_temp[self.all_features])
+            model.result = model.fit(q=alpha)
+
+            evals_result = None
+
+        elif model_name.split('_')[0] == 'statols':
+            # Need to standardise input
+            df_temp = df_model_train.dropna()
+            model = sm.OLS(df_temp[[self.target]], df_temp[self.all_features])
+            model.result = model.fit()
+
+            evals_result = None
+
         else: 
             raise ValueError("No supported model detected. Supported models are ['lightgbm', 'xgboost', 'catboost', 'skboost', 'skboosthist'].")
 
@@ -445,6 +498,7 @@ class Trial(object):
             raise ValueError('Value of regression parameter "objective" not recognized.')
 
         return model_q, evals_result_q
+
 
     def train_model_split_site(self, dfs_model_train_split, dfs_model_valid_split=None, weight_train_split=None):
         
@@ -485,51 +539,87 @@ class Trial(object):
         
 
     def predict(self, df_X, model_q, model_name, return_shap=False): 
-        # Use trained models to predict
+        # Use trained models to predict multiple quantiles and postprocess the predictions.
         
-        def post_process(y_pred):
+        def preprocess(df_X):
+            # Preprocess input data. 
+
+            # Keep all timestamps for which zenith <= prescribed value (day timestamps)
+            if self.train_only_zenith_angle_below:
+                idx_day = df_X['zenith'] <= self.train_only_zenith_angle_below
+                idx_night = df_X['zenith'] > self.train_only_zenith_angle_below
+                df_X = df_X[idx_day]
+
+            return df_X
+
+        def postprocess(y_pred_q):
+            # Postprocess predictions. 
+            # 1) Add back physical forecast if physical is subtracted from target
+            # 2) Clip target to min/max values or clearsky forecast
+            # 3) Apply quantile postprocessing
 
             if self.diff_target_with_physical: 
-                y_pred = y_pred+df_X['Physical_Forecast'].values
+                y_pred_q = y_pred_q+df_X['Physical_Forecast'].values
             
             if not self.regression_params['target_min_max'] == [None, None]: 
                 target_min_max = self.regression_params['target_min_max']
 
                 if target_min_max[1] == 'clearsky': 
-                    idx_clearsky = y_pred > df_X['Clearsky_Forecast'].values
-                    y_pred[idx_clearsky] = df_X['Clearsky_Forecast'].values[idx_clearsky]
+                    idx_clearsky = y_pred_q > df_X['Clearsky_Forecast'].values
+                    y_pred_q[idx_clearsky] = df_X['Clearsky_Forecast'].values[idx_clearsky]
                     
                     if not target_min_max[0] == None:
-                        y_pred = y_pred.clip(min=target_min_max[0], max=None)
+                        y_pred_q = y_pred_q.clip(min=target_min_max[0], max=None)
 
                 else:
-                    y_pred = y_pred.clip(min=target_min_max[0], max=target_min_max[1])
+                    y_pred_q = y_pred_q.clip(min=target_min_max[0], max=target_min_max[1])
 
-            return y_pred
+            if 'quantile_postprocess' in self.regression_params.keys():
+                idx_q_start = 1 if 'mean' in trial.regression_params['type'] else 0
+                if self.regression_params['quantile_postprocess'] == 'none':
+                    pass
+                elif self.regression_params['quantile_postprocess'] == 'sorting': 
+                    # Lazy post-sorting of quantiles
+                    y_pred_q[idx_q_start:,:] = np.sort(y_pred_q, axis=-1)
+                elif self.regression_params['quantile_postprocess'] == 'isotonic_regression': 
+                    # Isotonic regression
+                    regressor = IsotonicRegression()
+                    y_pred_q = np.stack([regressor.fit_transform(self.alpha_q, y_pred_q[sample,:]) for sample in range(idx_q_start, y_pred_q.shape[0])])                    
 
-        # Make DataFrame to store the predictions in
-        idx_q_start = 0
-        columns = []
-        if 'mean' in self.regression_params['type']:
-            idx_q_start += 1
-            columns.append('mean')
+            return y_pred_q
 
-        if 'quantile' in self.regression_params['type']:
-            columns.extend(['quantile{0}'.format(int(round(100*alpha))) for alpha in self.alpha_q])
-        
-        df_index = pd.DataFrame(index=df_X.index, columns=columns)
+        def create_prediction_dataframe(y_pred_q, index):
 
-        # Keep all timestamps for which zenith <= prescribed value (day timestamps)
-        if self.train_only_zenith_angle_below:
-            idx_day = df_X['zenith'] <= self.train_only_zenith_angle_below
-            idx_night = df_X['zenith'] > self.train_only_zenith_angle_below
-            df_X = df_X[idx_day]
+            # Make DataFrame to store the predictions in
+            columns = []
+            if 'mean' in self.regression_params['type']:
+                columns.append('mean')
 
+            if 'quantile' in self.regression_params['type']:
+                columns.extend(['quantile{0}'.format(int(round(100*alpha))) for alpha in self.alpha_q])
+            
+            df_y_pred_q = pd.DataFrame(index=df_X.index, columns=columns)
+
+            if self.train_only_zenith_angle_below:
+                df_y_pred_q[idx_day] = y_pred_q
+                df_y_pred_q[idx_night] = 0
+            else:
+                df_y_pred_q.values[:] = y_pred_q
+
+            df_y_pred_q = df_y_pred_q.astype('float64')
+
+            return df_y_pred_q
+
+        df_X = preprocess(df_X)
+
+        # Run prediction loop over all quantiles
         df_y_pred_qs = {}
-
         y_pred_q, X_shap_q, y_pred_post_process_q = [], [], []
         for q in model_q.keys():
-            y_pred = model_q[q].predict(df_X)
+            if (model_name.split('_')[0] == 'statquant') | (model_name.split('_')[0] == 'statols'):
+                y_pred = model_q[q].predict(model_q[q].result.params, df_X)
+            else:
+                y_pred = model_q[q].predict(df_X)
 
             if return_shap: 
                 explainer = shap.TreeExplainer(model_q[q])
@@ -537,41 +627,19 @@ class Trial(object):
                 X_shap_q.append(X_shap)
 
             y_pred_q.append(y_pred)
-            y_pred_post_process = post_process(y_pred)
-            y_pred_post_process_q.append(y_pred_post_process)
 
         # Convert list to numpy 2D-array
         if return_shap: X_shap_q = np.stack(X_shap_q, axis=-1)
         y_pred_q = np.stack(y_pred_q, axis=-1)
-        y_pred_post_process_q = np.stack(y_pred_post_process_q, axis=-1)
 
-        if 'quantile_postprocess' in self.regression_params.keys():
-            if self.regression_params['quantile_postprocess'] == 'none':
-                pass
-            elif self.regression_params['quantile_postprocess'] == 'sorting': 
-                # Lazy post-sorting of quantiles
-                y_pred_q[idx_q_start:,:] = np.sort(y_pred_q, axis=-1)
-                y_pred_post_process_q[idx_q_start:,:] = np.sort(y_pred_post_process_q, axis=-1)
-            elif self.regression_params['quantile_postprocess'] == 'isotonic_regression': 
-                # Isotonic regression
-                regressor = IsotonicRegression()
-                y_pred_q = np.stack([regressor.fit_transform(self.alpha_q, y_pred_q[sample,:]) for sample in range(idx_q_start, y_pred_q.shape[0])])                    
-                y_pred_post_process_q = np.stack([regressor.fit_transform(self.alpha_q, y_pred_post_process_q[sample,:]) for sample in range(idx_q_start, y_pred_post_process_q.shape[0])])                    
-
-        # Create prediction output dataframe
-        df_y_pred_q = df_index
-        if self.train_only_zenith_angle_below:
-            df_y_pred_q[idx_day] = y_pred_post_process_q
-            df_y_pred_q[idx_night] = 0
-        else:
-            df_y_pred_q.values[:] = y_pred_post_process_q
-
-        df_y_pred_q = df_y_pred_q.astype('float64')
+        y_pred_post_process_q = postprocess(y_pred_q)
+        df_y_pred_q = create_prediction_dataframe(y_pred_post_process_q, df_X.index)
 
         if return_shap:
             return df_y_pred_q, X_shap_q, y_pred_q, y_pred_post_process_q
         else:
             return df_y_pred_q, y_pred_q, y_pred_post_process_q
+
 
     def predict_model_split_site(self, dfs_X_split_site, model):
         # Use trained models to predict for their corresponding split
@@ -628,6 +696,7 @@ class Trial(object):
     
         return df_loss
 
+
     def calculate_loss_split_site(self, dfs_y_true_split, dfs_y_pred_model):
 
         print('Calculating loss...')
@@ -660,18 +729,37 @@ class Trial(object):
 
         return score_model
 
-    def save_json(self):
+   
+    def create_folders(self): 
         if os.path.exists(self.trial_path):
             shutil.rmtree(self.trial_path)
         os.makedirs(self.trial_path)
+        
+        if self.save_options['data'] == True:
+            os.makedirs(self.trial_path+'/'+'df_X_train')
+            os.makedirs(self.trial_path+'/'+'df_X_valid')
+            os.makedirs(self.trial_path+'/'+'df_y_train')
+            os.makedirs(self.trial_path+'/'+'df_y_valid')
+        if self.save_options['prediction'] == True:
+            os.makedirs(self.trial_path+'/'+'df_y_pred_train')
+            os.makedirs(self.trial_path+'/'+'df_y_pred_valid')
+        if self.save_options['model'] == True:
+            os.makedirs(self.trial_path+'/'+'model')
+        if self.save_options['loss'] == True:
+            os.makedirs(self.trial_path+'/'+'df_loss_train')
+            os.makedirs(self.trial_path+'/'+'df_loss_valid')
 
+
+    def save_json(self):
         file_name_json = '/params_'+self.trial_name+'.json'
         with open(self.trial_path+file_name_json, 'w') as file:
             json.dump(params_json, file, indent=4)
 
+
     def save_data_prediction_evals_loss(self, df, key, model, split, site): 
         file_name = key+'_'+model+'_split_{0}_site_{1}.csv'.format(split, site)
         df.to_csv(self.trial_path+'/'+key+'/'+file_name)
+
 
     def save_model(self, model_q, key, model_name, split, site):
         for q in model_q.keys():
@@ -684,21 +772,21 @@ class Trial(object):
                 with open(self.trial_path+'/'+key+'/'+file_name, 'wb') as f:
                     pickle.dump(model, f)
 
+
     def save_result(self, params_json, result_data, result_prediction, result_model, result_evals, result_loss):
 
         print('Saving results...')
+        self.create_folders()
         self.save_json()
 
         if self.save_options['data'] == True:
             for key in result_data.keys():
-                os.makedirs(self.trial_path+'/'+key)
                 for split in range(len(result_data[key])):
                     df = pd.concat(result_data[key][split], axis=1, keys=self.sites)
                     self.save_data_prediction_evals_loss(df, key, 'none', split, 'all') 
  
         if self.save_options['prediction'] == True:
             for key in result_prediction.keys():
-                os.makedirs(self.trial_path+'/'+key)
                 for model_name in self.model_params.keys():
                     for split in range(len(result_prediction[key][model_name])):
                         df = pd.concat(result_prediction[key][model_name][split], axis=1, keys=self.sites)
@@ -706,7 +794,6 @@ class Trial(object):
 
         if self.save_options['model'] == True:
             for key in result_model.keys():
-                os.makedirs(self.trial_path+'/'+key)
                 for model_name in self.model_params.keys():
                     for split in range(len(result_model[key][model_name])):
                         for site in range(len(result_model[key][model_name][0])):
@@ -715,7 +802,6 @@ class Trial(object):
 
         if self.save_options['evals'] == True:
             for key in result_evals.keys():
-                os.makedirs(self.trial_path+'/'+key)
                 for model_name in self.model_params.keys():
                     for split in range(len(result_evals[key][model_name])):
                         data = result_evals[key][model_name][split]
@@ -728,7 +814,6 @@ class Trial(object):
                         self.save_data_prediction_evals_loss(df, key, model, split, 'all')      
 
         if self.save_options['loss'] == True:
-            for key in result_loss.keys():
                 os.makedirs(self.trial_path+'/'+key)
                 for model_name in self.model_params.keys():
                     for split in range(len(result_loss[key][model_name])):
@@ -740,13 +825,13 @@ class Trial(object):
             score_valid_model = self.calculate_score(result_loss['dfs_loss_valid'])
             file_name = self.path_result+'/trial-scores.txt'
 
-            for model in score_train_model.keys():
+            for model_name in score_train_model.keys():
                 if not os.path.exists(file_name):
                     with open(file_name, 'w') as file:
-                        file.write('Name: {0}; Comment: {1}; Model: {2}; Train score {3}; valid score {4};\n'.format(self.trial_name, self.trial_comment, model, score_train_model[model], score_valid_model[model]))
+                        file.write('Name: {0}; Comment: {1}; Model: {2}; Train score {3}; valid score {4};\n'.format(self.trial_name, self.trial_comment, model_name, score_train_model[model_name], score_valid_model[model_name]))
                 else:
                     with open(file_name, 'a') as file:
-                        file.write('Name: {0}; Comment: {1}; Model: {2}; Train score {3}; valid score {4};\n'.format(self.trial_name, self.trial_comment, model, score_train_model[model], score_valid_model[model]))
+                        file.write('Name: {0}; Comment: {1}; Model: {2}; Train score {3}; valid score {4};\n'.format(self.trial_name, self.trial_comment, model_name, score_train_model[model_name], score_valid_model[model_name]))
         else:
             score_train_model = None
             score_valid_model = None
@@ -754,12 +839,14 @@ class Trial(object):
 
         return score_train_model, score_valid_model
 
+
     def run_pipeline(self, df):
         # Run pipeline sequentially. 
 
         print('Running trial pipeline for trial: {0}...'.format(self.trial_name))
         print('Number of workers: {0}.'.format(self.parallel_processing['n_workers']))
 
+        self.splits = self.generate_splits(df)
         dfs_X_train_split, dfs_y_train_split, dfs_model_train_split, weight_train_split = self.generate_dataset_split_site(df, split_set='train')
         dfs_X_valid_split, dfs_y_valid_split, dfs_model_valid_split, _ = self.generate_dataset_split_site(df, split_set='valid')
 
@@ -786,8 +873,18 @@ class Trial(object):
 
         return score_train_model, score_valid_model
 
+
     def run_pipeline_cross_validation(self, df, n_splits=5):
         # Run cross validation pipeline.
+        #TODO Ideas around stacking: 
+        # https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.StackingRegressor.html
+        # Scikit-learn has nice support for stacking. However, stacking+multiple output regression does not seem to be very well supported. 
+        # A first step could just be to implement stacking without multiple output support. This seems to be easier.
+        # Scikit-learn implements a cross validated version of stacking to make sure that final predictor is not overfitting.
+        # Using `passthrough` it is possible to send forward the features as well to the final predictor. 
+        # An alternative way is to run our own crossvalidation. Then use out of sample predictions to train a stacked model. 
+        # Stacked model could be specified through params_json as a second layer. More than two layers is not necessary. 
+        # Things to specify. Which models should be included as input? Which predictions (quantiles) should be included as input? 
 
         print('Running parallel cross validation pipeline for trial: {0}...'.format(self.trial_name))
         print('Number of workers: {0}.'.format(self.parallel_processing['n_workers']))
@@ -807,47 +904,30 @@ class Trial(object):
         print('Running parallel trial pipeline for trial: {0}...'.format(self.trial_name))
         print('Number of workers: {0}.'.format(self.parallel_processing['n_workers']))
         
-        self.save_json()
-        
-        if self.save_options['model'] == True:
-            os.makedirs(self.trial_path+'/'+'model')
-        if self.save_options['prediction'] == True:
-            os.makedirs(self.trial_path+'/'+'df_y_pred_train')
-            os.makedirs(self.trial_path+'/'+'df_y_pred_valid')
-        if self.save_options['loss'] == True:
-            os.makedirs(self.trial_path+'/'+'df_loss_train')
-            os.makedirs(self.trial_path+'/'+'df_loss_valid')
-        if self.save_options['data'] == True:
-            os.makedirs(self.trial_path+'/'+'df_X_train')
-            os.makedirs(self.trial_path+'/'+'df_X_valid')
-            os.makedirs(self.trial_path+'/'+'df_y_train')
-            os.makedirs(self.trial_path+'/'+'df_y_valid')
-
-  
         def train_site(df, split_idx, split_train, split_valid, site, pbar):
             df_X_train, df_y_train, df_model_train, weight = self.generate_dataset(df[site], split_train)
             df_X_valid, df_y_valid, df_model_valid, _ = self.generate_dataset(df[site], split_valid)
 
-            for model in self.model_params.keys():
+            for model_name in self.model_params.keys():
 
-                model_q, evals_result_q = self.train(df_model_train, model, df_model_valid=df_model_valid, weight=weight)
+                model_q, evals_result_q = self.train(df_model_train, model_name, df_model_valid=df_model_valid, weight=weight)
 
-                df_y_pred_train = self.predict(df_X_train, model_q, model)
-                df_y_pred_valid = self.predict(df_X_valid, model_q, model)
+                df_y_pred_train, _, _ = self.predict(df_X_train, model_q, model_name)
+                df_y_pred_valid, _, _ = self.predict(df_X_valid, model_q, model_name)
 
                 df_loss_train = self.calculate_loss(df_y_train, df_y_pred_train)
                 df_loss_valid = self.calculate_loss(df_y_valid, df_y_pred_valid)
 
-                if self.save_options['model'] == True:
-                    self.save_model(model_q, 'model', model, split_idx, site)
                 if self.save_options['prediction'] == True:
-                    self.save_data_prediction_evals_loss(df_y_pred_train, 'df_y_pred_train', model, split_idx, site)
-                    self.save_data_prediction_evals_loss(df_y_pred_valid, 'df_y_pred_valid', model, split_idx, site)
+                    self.save_data_prediction_evals_loss(df_y_pred_train, 'df_y_pred_train', model_name, split_idx, site)
+                    self.save_data_prediction_evals_loss(df_y_pred_valid, 'df_y_pred_valid', model_name, split_idx, site)
+                if self.save_options['model'] == True:
+                    self.save_model(model_q, 'model', model_name, split_idx, site)
                 if self.save_options['evals'] == True:
                     self.save_data_prediction_evals_loss(evals_result_q, key, model, split, 'all')
                 if self.save_options['loss'] == True:
-                    self.save_data_prediction_evals_loss(df_loss_train, 'df_loss_train', model, split_idx, site)
-                    self.save_data_prediction_evals_loss(df_loss_valid, 'df_loss_valid', model, split_idx, site)
+                    self.save_data_prediction_evals_loss(df_loss_train, 'df_loss_train', model_name, split_idx, site)
+                    self.save_data_prediction_evals_loss(df_loss_valid, 'df_loss_valid', model_name, split_idx, site)
 
                 pbar.update(1)
 
@@ -859,6 +939,16 @@ class Trial(object):
 
             return True 
 
+        # Initial checks
+        self.initial_checks(df)
+
+        # Create folders
+        self.create_folders()
+
+        # Generate splits
+        self.splits = self.generate_splits(df)
+
+        # Run pipeline in parallel for every split and site separately.  
         with tqdm(total=len(self.splits['train'])*len(self.sites)) as pbar:
             with joblib.parallel_backend(self.parallel_processing['backend']):
                 results = joblib.Parallel(n_jobs=self.parallel_processing['n_workers'])(
@@ -866,14 +956,14 @@ class Trial(object):
                             for split_idx, (split_train, split_valid) in enumerate(zip(self.splits['train'], self.splits['valid']))
                                 for site in self.sites)
 
-        print("Results: ", results)
-                    
+
     def run_pipeline_predict(self, df, model_path):        
         self.generate_dataset()
         self.load_model_q()
         self.predict_q()
 
         return prediction
+
 
 if __name__ == '__main__':
     params_path = sys.argv[1]
