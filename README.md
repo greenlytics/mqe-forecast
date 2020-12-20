@@ -103,5 +103,55 @@ python ./plots/generate_plots_wind.py
 
 Plots will be saved to the `plots` folder.
 
+## Different pipeline
+Right now the train is both the create model and the fit step. This means it is not possible to partially train a model. Should this be supported in the future? 
+
+### Methods in `Trial`
+The methods in the `Trial` class is given 
+Should it be renamed to `MQForecast` instead? 
+
+* `load_data`
+* `generate_dataset`
+* `generate_dataset_split_site`
+* `create_model`
+* `fit_model`
+* `train_mq`
+* `predict_mq`
+* `predict_mq_model_split_site`
+* `calculate_loss`
+* `calculate_loss_split_site`
+
+### `run_pipeline`
+This is used for training models for several splits and sites. 
+
+1) `generate_dataset_split_site`
+2) `train_model_split_site`
+3) `predict_model_split_site`
+4) `calculate_loss_split_site`
+
+### `run_pipeline_parallel`
+This is used for training models for several splits and sites in parallel. 
+
+1) `generate_dataset`
+2) `train_q`
+3) `predict_q`
+4) `calculate_loss`
+
+### `run_pipeline_cross_validation`
+This is used for training models for several cross validations splits and sites. Need to thing about this one if it is possible since we need to overwrite the predict function somehow. 
+Should be possible: https://stackoverflow.com/questions/52679784/post-process-cross-validated-prediction-before-scoring
+
+1) `generate_dataset_cv`
+2) `train_q`
+3) `predict_q`
+4) `calculate_loss`
+
+### `run_pipeline_predict`
+This is used for making operational predictions. 
+
+1) `generate_dataset`
+2) `load_model_q`
+3) `predict_q`
+
 ## Aknowledgement
 The authors of this code would like to thank the Swedish Energy Agency for their financial support for this research work under the grant VindEL project number: 47070-1.
