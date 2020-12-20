@@ -11,17 +11,18 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 import joblib 
+import matplotlib.pyplot as plt
+
+import shap
+import lightgbm as lgb
+import xgboost as xgb
+import catboost as cb
+from sklearn.experimental import enable_hist_gradient_boosting
+import sklearn as skl
 
 from sklearn.isotonic import IsotonicRegression
 
-import xgboost as xgb
-import catboost as cb
-from sklearn import ensemble
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore")
-    import lightgbm as lgb
-
-class Trial():
+class Trial(object):
     def __init__(self, params_json):
         self.params_json = params_json
 
@@ -53,10 +54,18 @@ class Trial():
                 raise ValueError('Number of quantiles needs to be larger than zero.')
 
         # Optional input variables
-        if 'variables_lags' in params_json:
-            self.variables_lags = params_json['variables_lags']
+        if 'random_seed' in params_json:
+            self.random_seed = params_json['random_seed']
+        else:
+            self.random_seed = None
+        if 'categorical_features' in params_json:
+            self.categorical_features = params_json['categorical_features']
         else: 
-            self.variables_lags = None
+            self.categorical_features = 'auto'
+        if 'feature_lags' in params_json:
+            self.feature_lags = params_json['feature_lags']
+        else: 
+            self.feature_lags = None
         if 'diff_target_with_physical' in params_json:
             self.diff_target_with_physical = params_json['diff_target_with_physical']
         else: 
@@ -85,10 +94,9 @@ class Trial():
         if 'datetime_splits' in params_json: 
             self.datetime_splits = params_json['datetime_splits']
             self.splits = params_json['datetime_splits']
-
-        elif 'train_test_splits' in params_json:
+        elif 'train_val_splits' in params_json:
             pass
-        elif 'crossvalidation_splits' in params_json:
+        elif 'cv_splits' in params_json:
             pass
         else:
             raise ValueError('One of `datetime_splits`, `train_test_splits` or `crossvalidation_splits` must be given in params_json.')
@@ -97,9 +105,11 @@ class Trial():
         self.parallel_backend = params_json.get("parallel_backend", "threading")
 
 
-    def load_data(self):
+    def load_data(self, path_data=None):
         # Load preprocessed data
-        path_data = self.path_preprocessed_data+self.filename_preprocessed_data
+
+        if path_data is None:
+            path_data = self.path_preprocessed_data+self.filename_preprocessed_data
         df = pd.read_csv(path_data, header=[0,1], index_col=[0,1], parse_dates=True)
 
         return df
@@ -107,9 +117,9 @@ class Trial():
 
     def generate_dataset(self, df, split=None): 
 
-        def add_lags(df, variables_lags): 
+        def add_lags(df, feature_lags): 
             # Lagged features
-            vspec = pd.DataFrame([(k, lag) for k, v in variables_lags.items() for lag in v], columns=["Variable", "Lag"]) \
+            vspec = pd.DataFrame([(k, lag) for k, v in feature_lags.items() for lag in v], columns=["Variable", "Lag"]) \
                                  .set_index("Variable") \
                                  .sort_values("Lag")
 
@@ -127,15 +137,15 @@ class Trial():
 
         # Split up dataset in features and target
         if split: 
-            df_X = df.loc[pd.IndexSlice[:, split[0]:split[1]], self.features]
-            df_y = df.loc[pd.IndexSlice[:, split[0]:split[1]], [self.target]]
+            df_X = pd.concat([df.loc[pd.IndexSlice[:, s[0]:s[1]], self.features] for s in split], axis=0).drop_duplicates(keep='first')
+            df_y = pd.concat([df.loc[pd.IndexSlice[:, s[0]:s[1]], [self.target]] for s in split], axis=0).drop_duplicates(keep='first')
         else: 
             df_X = df.loc[:, self.features]
             df_y = df.loc[:, [self.target]]
 
         # Add lagged variables
-        if self.variables_lags is not None: 
-            df_X, lagged_features = add_lags(df_X, self.variables_lags)            
+        if self.feature_lags is not None: 
+            df_X, lagged_features = add_lags(df_X, self.feature_lags)            
             self.all_features = self.features+lagged_features
         else:
             self.all_features = self.features
@@ -217,10 +227,27 @@ class Trial():
 
         return dfs_X_split, dfs_y_split, dfs_model_split, weight_split
 
+    def plot_splits(self, dfs_y_train_split, dfs_y_valid_split=None):
+        n_splits = len(dfs_y_train_split)
+        fig, axes = plt.subplots(nrows=n_splits, ncols=1, sharex=True, figsize=(20,2.5*n_splits))
+        for i in range(n_splits):
+            df_train = dfs_y_train_split[i][0].groupby('valid_datetime').first().resample('H').first()
+            axes[i].plot(df_train.index, df_train.values, label='train')
+            if dfs_y_valid_split is not None: 
+                df_valid = dfs_y_valid_split[i][0].groupby('valid_datetime').first().resample('H').first()
+                axes[i].plot(df_valid.index, df_valid.values, label='valid')
+            axes[i].set_title('split: {0}'.format(i+1))
+            axes[i].legend()
 
     def create_fit_model(self, model_name, df_model_train, objective='mean', alpha=None, df_model_valid=None, weight=None):
+        # Create and fit model. This method could potentially be split up in create and fit seperately. 
+        
+        if df_model_valid is not None:
+            eval_set =[(df_model_train[self.all_features], df_model_train[[self.target]]), (df_model_valid[self.all_features], df_model_valid[[self.target]])]
+        else:            
+            eval_set =[(df_model_train[self.all_features], df_model_train[[self.target]])]
 
-        if model_name == 'lightgbm':
+        if model_name.split('_')[0] == 'lightgbm':
             if objective == 'mean': 
                 objective_lgb = 'mean_squared_error'
                 eval_key_name = 'l2'
@@ -231,81 +258,160 @@ class Trial():
                 raise ValueError("'objective' for lightgbm must be either 'mean' or 'quantile'")
 
             model = lgb.LGBMRegressor(objective=objective_lgb,
-                                    alpha=alpha,
-                                    boosting_type=self.model_params['lightgbm'].get('boosting_type', 'gbdt'),
-                                    n_estimators=self.model_params['lightgbm'].get('num_trees', 100),
-                                    learning_rate=self.model_params['lightgbm'].get('learning_rate', 0.1), 
-                                    max_depth=self.model_params['lightgbm'].get('max_depth', -1), 
-                                    min_child_samples=self.model_params['lightgbm'].get('min_data_in_leaf', 20), 
-                                    num_leaves=self.model_params['lightgbm'].get('max_leaves', 31),
-                                    subsample=self.model_params['lightgbm'].get('bagging_fraction', 1.0), 
-                                    subsample_freq=self.model_params['lightgbm'].get('bagging_freq', 0.0), 
-                                    colsample_bytree=self.model_params['lightgbm'].get('feature_fraction', 1.0), 
-                                    reg_alpha=self.model_params['lightgbm'].get('lambda_l1', 0.0), 
-                                    reg_lambda=self.model_params['lightgbm'].get('lambda_l2', 0.0), 
-                                    importance_type='gain',
-                                    **self.model_params['lightgbm']['kwargs'])         
+                                      alpha=alpha,
+                                      boosting_type=self.model_params[model_name].get('boosting_type', 'gbdt'),
+                                      n_estimators=self.model_params[model_name].get('num_trees', 100),
+                                      learning_rate=self.model_params[model_name].get('learning_rate', 0.1), 
+                                      max_depth=self.model_params[model_name].get('max_depth', -1), 
+                                      min_child_samples=self.model_params[model_name].get('min_data_in_leaf', 20), 
+                                      num_leaves=self.model_params[model_name].get('max_leaves', 31),
+                                      subsample=self.model_params[model_name].get('bagging_fraction', 1.0), 
+                                      subsample_freq=self.model_params[model_name].get('bagging_freq', 0.0), 
+                                      colsample_bytree=self.model_params[model_name].get('feature_fraction', 1.0), 
+                                      reg_alpha=self.model_params[model_name].get('lambda_l1', 0.0), 
+                                      reg_lambda=self.model_params[model_name].get('lambda_l2', 0.0), 
+                                      random_state=self.random_seed,
+                                      importance_type='gain',
+                                      **self.model_params[model_name]['kwargs'])         
 
             model.fit(df_model_train[self.all_features],
-                    df_model_train[[self.target]],
-                    sample_weight=weight,
-                    eval_set=[(df_model_valid[self.all_features], df_model_valid[[self.target]])],
-                    eval_names=None,
-                    eval_metric=objective_lgb,
-                    early_stopping_rounds=self.model_params['lightgbm'].get("early_stopping", None),
-                    verbose=False,
-                    categorical_feature='auto', #TODO Change to pass this parameter explicitly
-                    callbacks=None)
+                      df_model_train[[self.target]],
+                      sample_weight=weight,
+                      eval_set=eval_set,
+                      early_stopping_rounds=self.model_params[model_name].get("early_stopping", None),
+                      verbose=False,
+                      categorical_feature=self.categorical_features,
+                      callbacks=None)
 
+            # Remove eval_key_name level from dictionary
             evals_result = {key: value[eval_key_name] for key, value in model.evals_result_.items()}   
                 
-        elif model_name == 'xgboost':
+        elif model_name.split('_')[0] == 'xgboost':
             if objective == 'mean': 
-                self.model_params['xgboost']['objective'] = 'reg:squarederror'
+                objective_xgb = 'reg:squarederror'
+                eval_key_name = 'rmse'
             else: 
                 raise ValueError("'objective' for xgboost must be 'mean'.")
-            evals_result = {}
-            gbm = xgb.train(self.model_params['xgboost'],
-                            train_set,
-                            self.model_params['xgboost']['num_round'],
-                            evals=valid_sets, 
-                            evals_result=evals_result,
-                            verbose_eval=False)
-            evals_result = None #TODO Add evals for xgboost
 
-        elif model_name == 'catboost':
+            model = xgboost.XGBRegressor(objective=objective_xgb,
+                                         booster=self.model_params[model_name].get('booster', 'gbtree'),
+                                         n_estimators=self.model_params[model_name].get('num_trees', 100),
+                                         learning_rate=self.model_params[model_name].get('learning_rate', 0.1), 
+                                         max_depth=self.model_params[model_name].get('max_depth', -1), 
+                                         min_child_samples=self.model_params[model_name].get('min_data_in_leaf', 20), 
+                                         num_leaves=self.model_params[model_name].get('max_leaves', 31),
+                                         subsample=self.model_params[model_name].get('bagging_fraction', 1.0), 
+                                         colsample_bytree=self.model_params[model_name].get('feature_fraction', 1.0), 
+                                         reg_alpha=self.model_params[model_name].get('lambda_l1', 0.0), 
+                                         reg_lambda=self.model_params[model_name].get('lambda_l2', 0.0), 
+                                         random_state=self.random_seed,
+                                         importance_type='gain', 
+                                         **self.model_params[model_name]['kwargs'])
+
+            model.fit(df_model_train[self.all_features],
+                      df_model_train[[self.target]],
+                      sample_weight=weight,
+                      eval_set=eval_set,
+                      early_stopping_rounds=self.model_params[model_name].get("early_stopping", None),
+                      verbose=False,
+                      callbacks=None)
+
+            # Remove eval_key_name level from dictionary
+            evals_result = {key: value[eval_key_name] for key, value in model.evals_result_.items()}   
+
+        elif model_name.split('_')[0] == 'catboost':
             if objective == 'mean': 
-                objective_cb = 'Lq:q=2'
+                objective_cb = 'RMSE'
+                eval_key_name = 'RMSE'
             elif objective == 'quantile': 
                 objective_cb = 'Quantile:alpha={0:g}'.format(alpha)
+                eval_key_name = 'Quantile:alpha={0:g}'.format(alpha)
             else: 
-                raise ValueError("'objective' must be one of ['mean', 'quantile']")
-            self.model_params['catboost']['objective'] = objective_cb
+                raise ValueError("'objective' for catboost must be one of ['mean', 'quantile']")
 
-            gbm = cb.train(pool=train_set,
-                           params=self.model_params['catboost'],
-                           eval_set=valid_sets,
-                           verbose=False)
-            evals_result = {key: value[objective_cb] for key, value in gbm.evals_result_.items()}
+            model = lgb.CatBoostRegressor(objective=objective_cb,
+                                          boosting_type=self.model_params[model_name].get('boosting_type', 'Plain'),
+                                          grow_policy=self.model_params[model_name].get('grow_policy', 'SymmetricTree'),
+                                          n_estimators=self.model_params[model_name].get('num_trees', 100),
+                                          learning_rate=self.model_params[model_name].get('learning_rate', 0.1), 
+                                          max_depth=self.model_params[model_name].get('max_depth', -1), 
+                                          min_data_in_leaf=self.model_params[model_name].get('min_data_in_leaf', 20), 
+                                          max_leaves=self.model_params[model_name].get('max_leaves', 31),
+                                          subsample=self.model_params[model_name].get('bagging_fraction', 1.0), 
+                                          subsample_freq=self.model_params[model_name].get('bagging_freq', 0.0), 
+                                          colsample_bytree=self.model_params[model_name].get('feature_fraction', 1.0), 
+                                          reg_alpha=self.model_params[model_name].get('lambda_l1', 0.0), 
+                                          reg_lambda=self.model_params[model_name].get('lambda_l2', 0.0), 
+                                          random_state=self.random_seed,
+                                          importance_type='gain',
+                                          **self.model_params[model_name]['kwargs']) 
 
-        elif model_name == 'skboost':
+            model.fit(df_model_train[self.all_features],
+                      df_model_train[[self.target]],
+                      sample_weight=weight,
+                      eval_set=eval_set, # Catboost already uses train set in eval_set. Therefore, should not be passed here. 
+                      early_stopping_rounds=self.model_params[model_name].get("early_stopping", None),
+                      verbose=False,
+                      cat_features=self.categorical_features,
+                      callbacks=None)
+
+            evals_result = {key: value[objective_cb] for key, value in model.evals_result_.items()}
+
+        elif model_name.split('_')[0] == 'skboost':
             if objective == 'mean': 
-                self.model_params['skboost']['loss'] = 'ls'
-                self.model_params['skboost']['criterion'] = 'friedman_mse'
+                objective_skb = 'ls'
+                criterion = 'friedman_mse'
             elif objective == 'quantile': 
-                self.model_params['skboost']['loss'] = 'quantile'
-                self.model_params['skboost']['alpha'] = alpha
-                self.model_params['skboost']['criterion'] = 'mae' #TODO Check how `criterion` affects quantile loss.
+                objective_skb = 'quantile'
+                criterion = 'mae' #TODO Check how `criterion` affects quantile loss.
             else: 
-                raise ValueError("'objective' must be one of ['mean', 'quantile']")
+                raise ValueError("'objective' for skboost must be either 'mean' or 'quantile'")
 
-            gbm = ensemble.GradientBoostingRegressor(**self.model_params['skboost'])
-            gbm.fit(train_set[0], train_set[1], sample_weight=train_set[2])
-            evals_result = None #TODO Add evals for skboost
+            model = skl.ensemble.GradientBoostingRegressor(loss=objective_skb,
+                                                           criterion=criterion, 
+                                                           alpha=alpha,
+                                                           n_estimators=self.model_params[model_name].get('num_trees', 100),
+                                                           learning_rate=self.model_params[model_name].get('learning_rate', 0.1), 
+                                                           max_depth=self.model_params[model_name].get('max_depth', 3), 
+                                                           min_samples_leaf=self.model_params[model_name].get('min_data_in_leaf', 20), 
+                                                           max_leaf_nodes=self.model_params[model_name].get('max_leaves', 31),
+                                                           subsample=self.model_params[model_name].get('bagging_fraction', 1.0), 
+                                                           validation_fraction=0.0,
+                                                           random_state=self.random_seed,
+                                                           verbose=0)
+
+            model.fit(df_model_train[self.all_features],
+                      df_model_train[[self.target]],
+                      sample_weight=weight)
+
+            evals_result = None # Not possible to return evals_result with current scikit-learn implementation.
+        
+        elif model_name.split('_')[0] == 'skboosthist':
+            if objective == 'mean': 
+                objective_skbh = 'least_squares'
+            else: 
+                raise ValueError("'objective' for skboost must be either 'mean'.")
+
+            model = skl.ensemble.HistGradientBoostingRegressor(loss=objective_skbh,
+                                                               max_iter=self.model_params[model_name].get('num_trees', 100),
+                                                               learning_rate=self.model_params[model_name].get('learning_rate', 0.1), 
+                                                               max_depth=self.model_params[model_name].get('max_depth', 3), 
+                                                               min_samples_leaf=self.model_params[model_name].get('min_data_in_leaf', 20), 
+                                                               max_leaf_nodes=self.model_params[model_name].get('max_leaves', 31),
+                                                               max_bins=self.model_params[model_name].get('max_bins', 255),
+                                                               validation_fraction=0.0,
+                                                               random_state=self.random_seed,
+                                                               verbose=0)
+
+            model.fit(df_model_train[self.all_features],
+                      df_model_train[[self.target]],
+                      sample_weight=weight)
+
+            evals_result = None # Not possible to return evals_result with current scikit-learn implementation.
 
         else: 
-            raise ValueError("'objective' for skboost must be either 'mean' or 'quantile'")
-        
+            raise ValueError("No supported model detected. Supported models are ['lightgbm', 'xgboost', 'catboost', 'skboost', 'skboosthist'].")
+
         return model, evals_result
 
 
@@ -314,12 +420,10 @@ class Trial():
         model_q, evals_result_q = {}, {}
         if 'mean' in self.regression_params['type']:
             # Train model for mean
-#            gbm, evals_result = self.train_on_objective(model, df_model_train, objective='mean', df_model_valid=df_model_valid, weight=weight)
-            model, evals_result = self.create_model(model_name, objective='mean')
-            model, evals_result = self.fit_model(model_name, df_model_train, objective='mean', df_model_valid=df_model_valid, weight=weight)
+            model, evals_result = self.create_fit_model(model_name, df_model_train, objective='mean', df_model_valid=df_model_valid, weight=weight)
 
             model_q['mean'] = model
-            evals_result_q['mean'] = evals_result #TODO change this similarly to quantile case. 
+            evals_result_q['mean'] = evals_result
 
         if 'quantile' in self.regression_params['type']:
             # Train models for different quantiles
@@ -364,9 +468,8 @@ class Trial():
                         else:
                             weight = None
                         
-                        model_q, evals_result_q = self.train(df_model_train, model_name, df_model_valid=df_model_valid, weight=weight) #TODO Make it possible to train starting from an existing model. E.g. LightGBM has a `input_model` option. 
+                        model_q, evals_result_q = self.train(df_model_train, model_name, df_model_valid=df_model_valid, weight=weight)
 
-                        #TODO Add support for categorical_features. 
                         model_site.append(model_q)
                         eval_result_site.append(evals_result_q)
                         
@@ -381,10 +484,9 @@ class Trial():
         return models_split_site, eval_results_split_site
         
 
-    def predict(self, df_X, model_q, model_name): 
+    def predict(self, df_X, model_q, model_name, return_shap=False): 
         # Use trained models to predict
-        #TODO Use SHAP to estimate contribution of different features. https://github.com/slundberg/shap
-
+        
         def post_process(y_pred):
 
             if self.diff_target_with_physical: 
@@ -425,25 +527,23 @@ class Trial():
 
         df_y_pred_qs = {}
 
-        y_pred_q = []
+        y_pred_q, X_shap_q, y_pred_post_process_q = [], [], []
         for q in model_q.keys():
-            if model_name == 'lightgbm':
-                y_pred = model_q[q].predict(df_X)
-            elif model_name == 'xgboost': 
-                if self.regression_params['type'][0] == 'mean':
-                    y_pred = model_q[q].predict(xgb.DMatrix(df_X))
-            elif model_name == 'catboost': 
-                y_pred = model_q[q].predict(df_X)
-            elif model_name == 'skboost': 
-                y_pred = model_q[q].predict(df_X)
-            else:
-                raise ValueError()
+            y_pred = model_q[q].predict(df_X)
 
-            y_pred = post_process(y_pred)
+            if return_shap: 
+                explainer = shap.TreeExplainer(model_q[q])
+                X_shap_q = explainer.shap_values(df_X)
+                X_shap_q.append(X_shap)
+
             y_pred_q.append(y_pred)
+            y_pred_post_process = post_process(y_pred)
+            y_pred_post_process_q.append(y_pred_post_process)
 
         # Convert list to numpy 2D-array
+        if return_shap: X_shap_q = np.stack(X_shap_q, axis=-1)
         y_pred_q = np.stack(y_pred_q, axis=-1)
+        y_pred_post_process_q = np.stack(y_pred_post_process_q, axis=-1)
 
         if 'quantile_postprocess' in self.regression_params.keys():
             if self.regression_params['quantile_postprocess'] == 'none':
@@ -451,22 +551,27 @@ class Trial():
             elif self.regression_params['quantile_postprocess'] == 'sorting': 
                 # Lazy post-sorting of quantiles
                 y_pred_q[idx_q_start:,:] = np.sort(y_pred_q, axis=-1)
+                y_pred_post_process_q[idx_q_start:,:] = np.sort(y_pred_post_process_q, axis=-1)
             elif self.regression_params['quantile_postprocess'] == 'isotonic_regression': 
                 # Isotonic regression
                 regressor = IsotonicRegression()
                 y_pred_q = np.stack([regressor.fit_transform(self.alpha_q, y_pred_q[sample,:]) for sample in range(idx_q_start, y_pred_q.shape[0])])                    
+                y_pred_post_process_q = np.stack([regressor.fit_transform(self.alpha_q, y_pred_post_process_q[sample,:]) for sample in range(idx_q_start, y_pred_post_process_q.shape[0])])                    
 
         # Create prediction output dataframe
         df_y_pred_q = df_index
         if self.train_only_zenith_angle_below:
-            df_y_pred_q[idx_day] = y_pred_q
+            df_y_pred_q[idx_day] = y_pred_post_process_q
             df_y_pred_q[idx_night] = 0
         else:
-            df_y_pred_q.values[:] = y_pred_q
+            df_y_pred_q.values[:] = y_pred_post_process_q
 
         df_y_pred_q = df_y_pred_q.astype('float64')
 
-        return df_y_pred_q
+        if return_shap:
+            return df_y_pred_q, X_shap_q, y_pred_q, y_pred_post_process_q
+        else:
+            return df_y_pred_q, y_pred_q, y_pred_post_process_q
 
     def predict_model_split_site(self, dfs_X_split_site, model):
         # Use trained models to predict for their corresponding split
@@ -480,7 +585,7 @@ class Trial():
                 for dfs_X_site, model_site in zip(dfs_X_split_site, model_split_site):
                     dfs_y_pred_site = []
                     for dfs_X, model_q, in zip(dfs_X_site, model_site):
-                        df_y_pred_q = self.predict(dfs_X, model_q, model_name)
+                        df_y_pred_q, _, _ = self.predict(dfs_X, model_q, model_name)
                         dfs_y_pred_site.append(df_y_pred_q)
 
                         pbar.update(1)
@@ -568,14 +673,14 @@ class Trial():
         file_name = key+'_'+model+'_split_{0}_site_{1}.csv'.format(split, site)
         df.to_csv(self.trial_path+'/'+key+'/'+file_name)
 
-    def save_model(self, model_q, key, model, split, site):
+    def save_model(self, model_q, key, model_name, split, site):
         for q in model_q.keys():
             model = model_q[q]
-            if model in ['lightgbm', 'xgboost', 'catboost']: 
-                file_name = key+'_'+model+'_q_'+q+'_split_{0}_site_{1}.txt'.format(split, site)
+            if model_name.split('_')[0] in ['lightgbm', 'xgboost', 'catboost']: 
+                file_name = key+'_'+model_name+'_q_'+q+'_split_{0}_site_{1}.txt'.format(split, site)
                 model.booster_.save_model(self.trial_path+'/'+key+'/'+file_name)
-            if model == 'skboost': 
-                file_name = key+'_'+model+'_q_'+q+'_split_{0}_site_{1}.pkl'.format(split, site)
+            if model_name.split('_')[0] in ['skboost', 'skboosthist']: 
+                file_name = key+'_'+model_name+'_q_'+q+'_split_{0}_site_{1}.pkl'.format(split, site)
                 with open(self.trial_path+'/'+key+'/'+file_name, 'wb') as f:
                     pickle.dump(model, f)
 
@@ -594,26 +699,26 @@ class Trial():
         if self.save_options['prediction'] == True:
             for key in result_prediction.keys():
                 os.makedirs(self.trial_path+'/'+key)
-                for model in self.model_params.keys():
-                    for split in range(len(result_prediction[key][model])):
-                        df = pd.concat(result_prediction[key][model][split], axis=1, keys=self.sites)
-                        self.save_data_prediction_evals_loss(df, key, model, split, 'all')      
+                for model_name in self.model_params.keys():
+                    for split in range(len(result_prediction[key][model_name])):
+                        df = pd.concat(result_prediction[key][model_name][split], axis=1, keys=self.sites)
+                        self.save_data_prediction_evals_loss(df, key, model_name, split, 'all')      
 
         if self.save_options['model'] == True:
             for key in result_model.keys():
                 os.makedirs(self.trial_path+'/'+key)
-                for model in self.model_params.keys():
-                    for split in range(len(result_model[key][model])):
-                        for site in range(len(result_model[key][model][0])):
-                            model_q = result_model[key][model][split][site]
-                            self.save_model(model_q, key, model, split, site)
+                for model_name in self.model_params.keys():
+                    for split in range(len(result_model[key][model_name])):
+                        for site in range(len(result_model[key][model_name][0])):
+                            model_q = result_model[key][model_name][split][site]
+                            self.save_model(model_q, key, model_name, split, site)
 
         if self.save_options['evals'] == True:
             for key in result_evals.keys():
                 os.makedirs(self.trial_path+'/'+key)
-                for model in self.model_params.keys():
-                    for split in range(len(result_evals[key][model])):
-                        data = result_evals[key][model][split]
+                for model_name in self.model_params.keys():
+                    for split in range(len(result_evals[key][model_name])):
+                        data = result_evals[key][model_name][split]
                         data = {(level1_key, level2_key, level3_key): pd.Series(values)
                                 for level1_key, level2_dict in zip(self.sites,data)
                                 for level2_key, level3_dict in level2_dict.items()
@@ -625,10 +730,10 @@ class Trial():
         if self.save_options['loss'] == True:
             for key in result_loss.keys():
                 os.makedirs(self.trial_path+'/'+key)
-                for model in self.model_params.keys():
-                    for split in range(len(result_loss[key][model])):
-                        df = pd.concat(result_loss[key][model][split], axis=1, keys=self.sites)
-                        self.save_data_prediction_evals_loss(df, key, model, split, 'all')      
+                for model_name in self.model_params.keys():
+                    for split in range(len(result_loss[key][model_name])):
+                        df = pd.concat(result_loss[key][model_name][split], axis=1, keys=self.sites)
+                        self.save_data_prediction_evals_loss(df, key, model_name, split, 'all')      
 
         if self.save_options['overall_score'] == True:
             score_train_model = self.calculate_score(result_loss['dfs_loss_train'])
@@ -650,8 +755,11 @@ class Trial():
         return score_train_model, score_valid_model
 
     def run_pipeline(self, df):
+        # Run pipeline sequentially. 
 
         print('Running trial pipeline for trial: {0}...'.format(self.trial_name))
+        print('Number of workers: {0}.'.format(self.parallel_processing['n_workers']))
+
         dfs_X_train_split, dfs_y_train_split, dfs_model_train_split, weight_train_split = self.generate_dataset_split_site(df, split_set='train')
         dfs_X_valid_split, dfs_y_valid_split, dfs_model_valid_split, _ = self.generate_dataset_split_site(df, split_set='valid')
 
@@ -679,6 +787,10 @@ class Trial():
         return score_train_model, score_valid_model
 
     def run_pipeline_cross_validation(self, df, n_splits=5):
+        # Run cross validation pipeline.
+
+        print('Running parallel cross validation pipeline for trial: {0}...'.format(self.trial_name))
+        print('Number of workers: {0}.'.format(self.parallel_processing['n_workers']))
 
         _, _, df_model, weight = self.generate_dataset(df)
         gbm = self.train_on_objective('lightgbm', df_model_train, objective='mean', alpha=None, weight=None, return_estimator_only=True)
@@ -690,8 +802,11 @@ class Trial():
         
 
     def run_pipeline_parallel(self, df):
-        print('Running trial pipeline for trial: {0}...'.format(self.trial_name))
+        # Run pipeline in parallel. 
 
+        print('Running parallel trial pipeline for trial: {0}...'.format(self.trial_name))
+        print('Number of workers: {0}.'.format(self.parallel_processing['n_workers']))
+        
         self.save_json()
         
         if self.save_options['model'] == True:
@@ -767,4 +882,4 @@ if __name__ == '__main__':
 
     trial = Trial(params_json)
     df = trial.load_data()
-    trial.run_pipeline(df)
+    trial.run_pipeline_parallel(df)
