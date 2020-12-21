@@ -972,4 +972,4 @@ if __name__ == '__main__':
 
     trial = Trial(params_json)
     df = trial.load_data()
-    trial.run_pipeline_parallel(df)
+    trial.run_pipeline(df)
