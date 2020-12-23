@@ -1,9 +1,6 @@
 #!/usr/bin/python
 
-import sys
-import os
-import shutil
-import json
+import sys, os, glob, shutil, json, re
 import pickle
 import warnings
 import datetime
@@ -12,6 +9,9 @@ import pandas as pd
 from tqdm import tqdm
 import joblib 
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+plt.rc('xtick', labelsize=14)
+plt.rc('ytick', labelsize=14)
 
 import shap
 import lightgbm as lgb
@@ -22,6 +22,83 @@ import sklearn as skl
 import statsmodels.api as sm
 
 from sklearn.isotonic import IsotonicRegression
+
+def natural_sort(l): 
+    convert = lambda text: int(text) if text.isdigit() else text.lower() 
+    alphanum_key = lambda key: [ convert(c) for c in re.split('([0-9]+)', key) ] 
+    return sorted(l, key = alphanum_key)
+
+def load_dfs_trial(path): 
+    files = glob.glob(path)
+    files = natural_sort(files)
+    dfs_split = []
+    for file in files: 
+        df = pd.read_csv(file, index_col=[0,1], header=[0,1], parse_dates=True)
+        dfs_split.append(df)
+    
+    return dfs_split
+
+def plot_splits(self, dfs_y_train_split, dfs_y_valid_split=None):
+    n_splits = len(dfs_y_train_split)
+    fig, axes = plt.subplots(nrows=n_splits, ncols=1, sharex=True, figsize=(20,2.5*n_splits))
+
+    axes = axes if isinstance(axes, np.ndarray) else [axes]
+    for i in range(n_splits):
+        df_train = dfs_y_train_split[i][0].groupby('valid_datetime').first().resample('H').first()
+        axes[i].plot(df_train.index, df_train.values, label='train')
+        if dfs_y_valid_split is not None: 
+            df_valid = dfs_y_valid_split[i][0].groupby('valid_datetime').first().resample('H').first()
+            axes[i].plot(df_valid.index, df_valid.values, label='valid')
+
+        axes[i].set_title('split: {0}'.format(i+1), fontsize=14)
+        axes[i].legend()
+
+def plot_quantile_forecast(df_pred_site, df_y_site, start_time, end_time):
+    df_plot_pred_site = df_pred_site.groupby('valid_datetime').last()[start_time:end_time].astype(float)
+    df_plot_true_site = df_y_site.groupby('valid_datetime').last()[start_time:end_time].astype(float)
+    
+    sites = natural_sort(df_pred_site.columns.get_level_values(0).unique())
+    quantiles = [quantile[8:] for quantile in df_pred_site.filter(regex='quantile').columns.levels[1]]
+    
+    fig, ax = plt.subplots(nrows=len(sites), sharex=True, figsize=(16,4*len(sites)))
+    if not isinstance(ax, np.ndarray): ax = [ax]
+    
+    for i, site in enumerate(sites): 
+        df_plot_pred = df_plot_pred_site[site]
+        df_plot_true = df_plot_true_site[site]
+        alphas = np.linspace(0.1, 0.5, int(len(quantiles)/2))
+        for j in range(int(len(quantiles)/2)):
+            ax[i].fill_between(df_plot_pred.index, 
+                               df_plot_pred['quantile'+quantiles[j+1]].values, 
+                               df_plot_pred['quantile'+quantiles[len(quantiles)-j-1]].values,
+                               color='b', linewidth=0.0, alpha=alphas[j])
+        ax[i].plot(df_plot_pred.index, df_plot_pred['quantile50'].values, 'k--', label='median')
+        ax[i].plot(df_plot_true.index, df_plot_true.values, 'k', label='real')
+
+        ax[i].set_title('site {0}'.format(site))
+        ax[i].set_ylabel('power', fontsize=14)
+        plt.setp(ax[i].get_xticklabels(), rotation=30, ha='right')
+        ax[i].xaxis.set_major_formatter(mdates.DateFormatter('%m-%d-%Y'))
+        ax[i].grid()
+    
+    return ax
+
+def plot_error_mae_mse(df_y_pred, df_y, pred_column='quantile50', kind='mse'): 
+    df_pred = df_y_pred.filter(regex=pred_column).droplevel(1, axis=1)
+    df_y = df_y.droplevel(1, axis=1)
+    
+    if kind == 'mae': 
+        df_err = (df_pred-df_y).abs()
+    elif kind == 'mse':
+        df_err = (df_pred-df_y)**2
+
+    df_err['lead_time'] = (df_err.index.get_level_values(1)-df_err.index.get_level_values(0))/pd.Timedelta(value='1H')
+    df_err = df_err.groupby(by='lead_time').mean()
+    ax = df_err.plot(figsize=(12,4))
+    ax.set_ylabel(kind)
+
+    return ax
+
 
 class Trial(object):
     def __init__(self, params_json):
@@ -179,7 +256,7 @@ class Trial(object):
 
         # Create target and feature DataFrames
         if self.diff_target_with_physical:
-            df_model[self.target] = df_model[self.target]-df_model['Physical_Forecast']
+            df_model[self.target] = df_model[self.target]-df_model[self.diff_target_with_physical]
 
         # Use mean window to smooth target
         df_model[self.target] = df_model[self.target].rolling(self.target_smoothing_window, win_type='boxcar', center=True, min_periods=0).mean()
@@ -246,21 +323,6 @@ class Trial(object):
         return dfs_X_split, dfs_y_split, dfs_model_split, weight_split
 
 
-    def plot_splits(self, dfs_y_train_split, dfs_y_valid_split=None):
-        n_splits = len(dfs_y_train_split)
-        fig, axes = plt.subplots(nrows=n_splits, ncols=1, sharex=True, figsize=(20,2.5*n_splits))
-        axes = axes if isinstance(axes, list) else [axes]
-
-        for i in range(n_splits):
-            df_train = dfs_y_train_split[i][0].groupby('valid_datetime').first().resample('H').first()
-            axes[i].plot(df_train.index, df_train.values, label='train')
-            if dfs_y_valid_split is not None: 
-                df_valid = dfs_y_valid_split[i][0].groupby('valid_datetime').first().resample('H').first()
-                axes[i].plot(df_valid.index, df_valid.values, label='valid')
-            axes[i].set_title('split: {0}'.format(i+1))
-            axes[i].legend()
-
-
     def create_fit_model(self, model_name, df_model_train, objective='mean', alpha=None, df_model_valid=None, weight=None):
         # Create and fit model. This method could potentially be split up in create and fit seperately. 
         
@@ -288,7 +350,7 @@ class Trial(object):
                                       min_child_samples=self.model_params[model_name].get('min_data_in_leaf', 20), 
                                       num_leaves=self.model_params[model_name].get('max_leaves', 31),
                                       subsample=self.model_params[model_name].get('bagging_fraction', 1.0), 
-                                      subsample_freq=self.model_params[model_name].get('bagging_freq', 0.0), 
+                                      subsample_freq=self.model_params[model_name].get('bagging_freq', 0), 
                                       colsample_bytree=self.model_params[model_name].get('feature_fraction', 1.0), 
                                       reg_alpha=self.model_params[model_name].get('lambda_l1', 0.0), 
                                       reg_lambda=self.model_params[model_name].get('lambda_l2', 0.0), 
@@ -559,7 +621,7 @@ class Trial(object):
             # 3) Apply quantile postprocessing
 
             if self.diff_target_with_physical: 
-                y_pred_q = y_pred_q+df_X['Physical_Forecast'].values
+                y_pred_q = y_pred_q+df_X[self.diff_target_with_physical].values.reshape(-1,1)
             
             if not self.regression_params['target_min_max'] == [None, None]: 
                 target_min_max = self.regression_params['target_min_max']
@@ -736,24 +798,26 @@ class Trial(object):
         os.makedirs(self.trial_path)
         
         if self.save_options['data'] == True:
-            os.makedirs(self.trial_path+'/'+'df_X_train')
-            os.makedirs(self.trial_path+'/'+'df_X_valid')
-            os.makedirs(self.trial_path+'/'+'df_y_train')
-            os.makedirs(self.trial_path+'/'+'df_y_valid')
+            os.makedirs(self.trial_path+'/'+'dfs_X_train')
+            os.makedirs(self.trial_path+'/'+'dfs_X_valid')
+            os.makedirs(self.trial_path+'/'+'dfs_y_train')
+            os.makedirs(self.trial_path+'/'+'dfs_y_valid')
         if self.save_options['prediction'] == True:
-            os.makedirs(self.trial_path+'/'+'df_y_pred_train')
-            os.makedirs(self.trial_path+'/'+'df_y_pred_valid')
+            os.makedirs(self.trial_path+'/'+'dfs_y_pred_train')
+            os.makedirs(self.trial_path+'/'+'dfs_y_pred_valid')
         if self.save_options['model'] == True:
-            os.makedirs(self.trial_path+'/'+'model')
+            os.makedirs(self.trial_path+'/'+'models')
         if self.save_options['loss'] == True:
-            os.makedirs(self.trial_path+'/'+'df_loss_train')
-            os.makedirs(self.trial_path+'/'+'df_loss_valid')
+            os.makedirs(self.trial_path+'/'+'dfs_loss_train')
+            os.makedirs(self.trial_path+'/'+'dfs_loss_valid')
 
 
-    def save_json(self):
-        file_name_json = '/params_'+self.trial_name+'.json'
-        with open(self.trial_path+file_name_json, 'w') as file:
-            json.dump(params_json, file, indent=4)
+    def save_json(self, file_path=None):
+        if file_path == None: 
+            file_name_json = '/params_'+self.trial_name+'.json'
+            file_path = self.trial_path+file_name_json 
+        with open(file_path, 'w') as file:
+            json.dump(self.params_json, file, indent=4)
 
 
     def save_data_prediction_evals_loss(self, df, key, model, split, site): 
@@ -772,6 +836,28 @@ class Trial(object):
                 with open(self.trial_path+'/'+key+'/'+file_name, 'wb') as f:
                     pickle.dump(model, f)
 
+    def consolidate_csv_sites(self, path=None): 
+        # Consolidating all several files with seperate sites into one multiindex (on columns) dataframe. 
+        # Not used currently. 
+        files = glob.glob(path+'*.csv')
+        files = natural_sort(files)
+
+        file_split = [int(file.split('split_')[1].split('_')[0]) for file in files]
+        idx_splits = list(set(file_split))
+
+        dfs = []
+        for idx_split in idx_splits: 
+            # Get all idx in files that corresponds to same split (idx_split)
+            idx_sites = [idx for idx, split in enumerate(file_split) if split==idx_split]
+            for idx_site in idx_sites: 
+                df = pd.read_csv(files[idx_site], index_col=[0,1], header=0)
+                dfs.append(df)
+                os.remove(files[idx_site])
+                
+            df_split = pd.concat(dfs, axis=1, keys=idx_sites)
+            file_name = files[idx_site].split('/')[-1].split('_site')[0]+'.csv'
+
+            df_split.to_csv(path+file_name)
 
     def save_result(self, params_json, result_data, result_prediction, result_model, result_evals, result_loss):
 
@@ -814,7 +900,7 @@ class Trial(object):
                         self.save_data_prediction_evals_loss(df, key, model, split, 'all')      
 
         if self.save_options['loss'] == True:
-                os.makedirs(self.trial_path+'/'+key)
+            for key in result_loss.keys():
                 for model_name in self.model_params.keys():
                     for split in range(len(result_loss[key][model_name])):
                         df = pd.concat(result_loss[key][model_name][split], axis=1, keys=self.sites)
@@ -919,23 +1005,23 @@ class Trial(object):
                 df_loss_valid = self.calculate_loss(df_y_valid, df_y_pred_valid)
 
                 if self.save_options['prediction'] == True:
-                    self.save_data_prediction_evals_loss(df_y_pred_train, 'df_y_pred_train', model_name, split_idx, site)
-                    self.save_data_prediction_evals_loss(df_y_pred_valid, 'df_y_pred_valid', model_name, split_idx, site)
+                    self.save_data_prediction_evals_loss(df_y_pred_train, 'dfs_y_pred_train', model_name, split_idx, site)
+                    self.save_data_prediction_evals_loss(df_y_pred_valid, 'dfs_y_pred_valid', model_name, split_idx, site)
                 if self.save_options['model'] == True:
                     self.save_model(model_q, 'model', model_name, split_idx, site)
                 if self.save_options['evals'] == True:
                     self.save_data_prediction_evals_loss(evals_result_q, key, model, split, 'all')
                 if self.save_options['loss'] == True:
-                    self.save_data_prediction_evals_loss(df_loss_train, 'df_loss_train', model_name, split_idx, site)
-                    self.save_data_prediction_evals_loss(df_loss_valid, 'df_loss_valid', model_name, split_idx, site)
+                    self.save_data_prediction_evals_loss(df_loss_train, 'dfs_loss_train', model_name, split_idx, site)
+                    self.save_data_prediction_evals_loss(df_loss_valid, 'dfs_loss_valid', model_name, split_idx, site)
 
                 pbar.update(1)
 
             if self.save_options['data'] == True:
-                self.save_data_prediction_evals_loss(df_X_train, 'df_X_train', 'none', split_idx, site)      
-                self.save_data_prediction_evals_loss(df_X_valid, 'df_X_valid', 'none', split_idx, site)      
-                self.save_data_prediction_evals_loss(df_y_train, 'df_y_train', 'none', split_idx, site)      
-                self.save_data_prediction_evals_loss(df_y_valid, 'df_y_valid', 'none', split_idx, site) 
+                self.save_data_prediction_evals_loss(df_X_train, 'dfs_X_train', 'none', split_idx, site)      
+                self.save_data_prediction_evals_loss(df_X_valid, 'dfs_X_valid', 'none', split_idx, site)      
+                self.save_data_prediction_evals_loss(df_y_train, 'dfs_y_train', 'none', split_idx, site)      
+                self.save_data_prediction_evals_loss(df_y_valid, 'dfs_y_valid', 'none', split_idx, site) 
 
             return True 
 
@@ -955,7 +1041,8 @@ class Trial(object):
                             joblib.delayed(train_site)(df, split_idx, split_train, split_valid, site, pbar)
                             for split_idx, (split_train, split_valid) in enumerate(zip(self.splits['train'], self.splits['valid']))
                                 for site in self.sites)
-
+        # Save params json
+        self.save_json()
 
     def run_pipeline_predict(self, df, model_path):        
         self.generate_dataset()
@@ -965,6 +1052,16 @@ class Trial(object):
         return prediction
 
 
+# Helper functions
+def natural_sort(l):
+    # https://stackoverflow.com/questions/4836710/is-there-a-built-in-function-for-string-natural-sort 
+    convert = lambda text: int(text) if text.isdigit() else text.lower() 
+    alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)] 
+    l_sorted = sorted(l, key=alphanum_key)
+
+    return l_sorted
+
+
 if __name__ == '__main__':
     params_path = sys.argv[1]
     with open(params_path, 'r', encoding='utf-8') as file:
@@ -972,4 +1069,4 @@ if __name__ == '__main__':
 
     trial = Trial(params_json)
     df = trial.load_data()
-    trial.run_pipeline_parallel(df)
+    trial.run_pipeline(df)
