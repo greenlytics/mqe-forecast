@@ -12,7 +12,7 @@ import shap
 
 
 
-def plot_splits(self, dfs_y_train_split, dfs_y_valid_split=None):
+def plot_splits(dfs_y_train_split, dfs_y_valid_split=None):
     n_splits = len(dfs_y_train_split)
     fig, axes = plt.subplots(nrows=n_splits, ncols=1, sharex=True, figsize=(20,2.5*n_splits))
 
@@ -101,7 +101,7 @@ def plot_mae_mse_lead_time(df_y_pred, df_y, pred_column='quantile50', kind='mse'
     if kind == 'mae': 
         df_err = (df_pred-df_y).abs()
     elif kind == 'mse':
-        df_err = (df_pred-df_y)**2
+        df_err = (df_pred-df_y).pow(2)
 
     df_err['lead_time'] = (df_err.index.get_level_values(1)-df_err.index.get_level_values(0))/pd.Timedelta(value='1H')
     df_err = df_err.groupby(by='lead_time').mean()
@@ -109,6 +109,60 @@ def plot_mae_mse_lead_time(df_y_pred, df_y, pred_column='quantile50', kind='mse'
     ax.set_ylabel(kind)
 
     return ax
+
+
+def plot_skill_mae_mse_lead_time(df_y_pred, df_y, climatology, autocorr, pred_column='quantile50', kind='mse'): 
+    df_pred = df_y_pred.filter(regex=pred_column).droplevel(1, axis=1)
+    df_y = df_y.droplevel(1, axis=1)
+
+    lead_times_idx = ((df_y.index.get_level_values(1)-df_y.index.get_level_values(0))/pd.Timedelta(value='1H')).astype(int)
+    lead_times_list = list(lead_times_idx)
+
+    # Persistence
+    df_y_copy = df_y.copy()
+    df_y_copy[lead_times_idx!=0] = np.nan
+    df_persistence = df_y_copy.fillna(method='ffill')
+
+    # Climatology
+    df_climatology = pd.DataFrame(data=climatology, index=df_y.index, columns=df_y.columns)
+
+    # Improved persistence
+    data_autocorr = [autocorr[lead_time] for lead_time in lead_times_list]
+    df_autocorr = pd.DataFrame(data=data_autocorr, index=df_y.index, columns=df_y.columns)
+    df_improved_persistence = df_autocorr*df_persistence+(1-df_autocorr)*df_climatology
+
+    # Errors
+    if kind == 'mae': 
+        df_err = (df_pred-df_y).abs()
+        df_err_persistence = (df_persistence-df_y).abs()
+        df_err_climatology = (df_climatology-df_y).abs()
+        df_err_improved_presistence = (df_improved_persistence-df_y).abs()
+    elif kind == 'mse':
+        df_err = (df_pred-df_y).pow(2)
+        df_err_persistence = (df_persistence-df_y).pow(2)
+        df_err_climatology = (df_climatology-df_y).pow(2)
+        df_err_improved_presistence = (df_improved_persistence-df_y).pow(2)
+    
+    df_err = df_err.groupby(lead_times_idx).mean()
+    df_err_persistence = df_err_persistence.groupby(lead_times_idx).mean()
+    df_err_climatology = df_err_climatology.groupby(lead_times_idx).mean()
+    df_err_improved_presistence = df_err_improved_presistence.groupby(lead_times_idx).mean()
+
+    df_skill_persistence = 1-df_err/df_err_persistence
+    df_skill_climatology = 1-df_err/df_err_climatology
+    df_skill_improved_persistence = 1-df_err/df_err_improved_presistence
+    
+    fig, ax = plt.subplots(figsize=(10,4))
+    ax.plot(df_skill_persistence.index+1, 100*df_skill_persistence.values, '-o', label='persistence')
+    ax.plot(df_skill_climatology.index+1, 100*df_skill_climatology.values, '-o', label='cilmatology')
+    ax.plot(df_skill_improved_persistence.index+1, 100*df_skill_improved_persistence.values, '-o', label='improved_persistence')
+    plt.ylabel('skill [%]', fontsize=14)
+    plt.xlabel('lead_time [h]', fontsize=14)
+    plt.legend(fontsize=14)
+    plt.grid()
+
+    return ax
+
 
 def plot_mae_mse_timeofyear(df_y_pred, df_y, pred_column='quantile50', kind='mae'): 
     df_y_pred = df_y_pred.filter(regex='quantile50').droplevel(1, axis=1)
@@ -130,6 +184,7 @@ def plot_mae_mse_timeofyear(df_y_pred, df_y, pred_column='quantile50', kind='mae
         plt.xlabel('day of year', fontsize=14)
         plt.ylabel('hour of day', fontsize=14)
 
+
 def plot_quantile_loss(dfs_loss):
     
     splits = range(len(dfs_loss))
@@ -148,6 +203,40 @@ def plot_quantile_loss(dfs_loss):
         ax[split].set_title('split: {0}'.format(split), fontsize=14)
         ax[split].set_xlabel('quantile', fontsize=14)
         ax[split].set_ylabel('pinball loss', fontsize=14)
+
+
+def plot_learning_curve(dfs_eval_result):
+    sites = natural_sort(dfs_eval_result.columns.levels[0])
+    quantiles = dfs_eval_result.columns.levels[1]
+    evalsets = dfs_eval_result.columns.levels[2]
+
+    fig, axes = plt.subplots(nrows=int(np.ceil(len(sites)/5)), ncols=5, sharey=True, figsize=(15,4*int(np.ceil(len(sites)/4))))
+    axes = axes.flatten()
+
+    for site, ax in zip(sites,axes):
+        for quantile in quantiles: 
+            ax.plot(dfs_eval_result[site][quantile]['valid_0'], color='blue')
+            ax.plot(dfs_eval_result[site][quantile]['valid_1'], color='orange')
+            ax.set_title('site {0}'.format(site), fontsize=14)
+            ax.set_xlabel('iterations', fontsize=14)
+            ax.set_ylabel('loss', fontsize=14)
+    plt.tight_layout()
+
+
+def plot_feature_importance(models, importance_type='gain'):
+    import warnings 
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        importance_type = 'split'
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(20,5))
+        for model in models:
+            for model_name, model_q in model.items():
+                colors = plt.cm.viridis(np.linspace(0,1,len(model_q)))
+                for quantile, color in zip(model_q,colors):
+                    if model_name == 'lightgbm':
+                        feature_importance = model_q[quantile].feature_importance(importance_type=importance_type)
+                        ax.plot(model_q[quantile].feature_name(), feature_importance, c=color);
+                        ax.set_xticklabels(model_q[quantile].feature_name(), rotation=45);
 
 
 def natural_sort(l): 

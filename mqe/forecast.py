@@ -19,76 +19,15 @@ import statsmodels.api as sm
 
 from sklearn.isotonic import IsotonicRegression
 
-def load_dfs_trial(path): 
+def load_dfs_trial(path, index_col=[0,1], header=[0,1]): 
     files = glob.glob(path)
     files = natural_sort(files)
     dfs_split = []
     for file in files: 
-        df = pd.read_csv(file, index_col=[0,1], header=[0,1], parse_dates=True)
+        df = pd.read_csv(file, index_col=index_col, header=header, parse_dates=True)
         dfs_split.append(df)
     
     return dfs_split
-
-def plot_splits(self, dfs_y_train_split, dfs_y_valid_split=None):
-    n_splits = len(dfs_y_train_split)
-    fig, axes = plt.subplots(nrows=n_splits, ncols=1, sharex=True, figsize=(20,2.5*n_splits))
-
-    axes = axes if isinstance(axes, np.ndarray) else [axes]
-    for i in range(n_splits):
-        df_train = dfs_y_train_split[i][0].groupby('valid_datetime').first().resample('H').first()
-        axes[i].plot(df_train.index, df_train.values, label='train')
-        if dfs_y_valid_split is not None: 
-            df_valid = dfs_y_valid_split[i][0].groupby('valid_datetime').first().resample('H').first()
-            axes[i].plot(df_valid.index, df_valid.values, label='valid')
-
-        axes[i].set_title('split: {0}'.format(i+1), fontsize=14)
-        axes[i].legend()
-
-def plot_quantile_forecast(df_pred_site, df_y_site, start_time, end_time):
-    df_plot_pred_site = df_pred_site.groupby('valid_datetime').last()[start_time:end_time].astype(float)
-    df_plot_true_site = df_y_site.groupby('valid_datetime').last()[start_time:end_time].astype(float)
-    
-    sites = natural_sort(df_pred_site.columns.get_level_values(0).unique())
-    quantiles = [quantile[8:] for quantile in df_pred_site.filter(regex='quantile').columns.levels[1]]
-    
-    fig, ax = plt.subplots(nrows=len(sites), sharex=True, figsize=(16,4*len(sites)))
-    if not isinstance(ax, np.ndarray): ax = [ax]
-    
-    for i, site in enumerate(sites): 
-        df_plot_pred = df_plot_pred_site[site]
-        df_plot_true = df_plot_true_site[site]
-        alphas = np.linspace(0.1, 0.5, int(len(quantiles)/2))
-        for j in range(int(len(quantiles)/2)):
-            ax[i].fill_between(df_plot_pred.index, 
-                               df_plot_pred['quantile'+quantiles[j+1]].values, 
-                               df_plot_pred['quantile'+quantiles[len(quantiles)-j-1]].values,
-                               color='b', linewidth=0.0, alpha=alphas[j])
-        ax[i].plot(df_plot_pred.index, df_plot_pred['quantile50'].values, 'k--', label='median')
-        ax[i].plot(df_plot_true.index, df_plot_true.values, 'k', label='real')
-
-        ax[i].set_title('site {0}'.format(site))
-        ax[i].set_ylabel('power', fontsize=14)
-        plt.setp(ax[i].get_xticklabels(), rotation=30, ha='right')
-        ax[i].xaxis.set_major_formatter(mdates.DateFormatter('%m-%d-%Y'))
-        ax[i].grid()
-    
-    return ax
-
-def plot_error_mae_mse(df_y_pred, df_y, pred_column='quantile50', kind='mse'): 
-    df_pred = df_y_pred.filter(regex=pred_column).droplevel(1, axis=1)
-    df_y = df_y.droplevel(1, axis=1)
-    
-    if kind == 'mae': 
-        df_err = (df_pred-df_y).abs()
-    elif kind == 'mse':
-        df_err = (df_pred-df_y)**2
-
-    df_err['lead_time'] = (df_err.index.get_level_values(1)-df_err.index.get_level_values(0))/pd.Timedelta(value='1H')
-    df_err = df_err.groupby(by='lead_time').mean()
-    ax = df_err.plot(figsize=(12,4))
-    ax.set_ylabel(kind)
-
-    return ax
 
 
 class Trial(object):
@@ -555,18 +494,25 @@ class Trial(object):
         if not (('mean' in self.regression_params['type']) or ('quantile' in self.regression_params['type'])):
             raise ValueError('Value of regression parameter "objective" not recognized.')
 
-        return model_q, evals_result_q
+        # Convert evals_result_q to dataframe
+        data = {(level1_key, level2_key): pd.Series(values)
+                for level1_key in evals_result_q.keys()
+                for level2_key, values in evals_result_q[level1_key].items()}
+        df_evals_result_q = pd.DataFrame(data)
+        df_evals_result_q.index.name = 'iterations'
+
+        return model_q, df_evals_result_q
 
 
     def train_model_split_site(self, dfs_model_train_split_site, dfs_model_valid_split_site=None, weight_train_split_site=None):
         
         print('Training...')
-        models_split_site, eval_results_split_site = [], []
+        models_split_site, dfs_evals_result_site_split = [], []
         with tqdm(total=len(dfs_model_train_split_site)*len(dfs_model_train_split_site[0])*len(self.model_params.keys())) as pbar:
             for idx_split, dfs_model_train_site in enumerate(dfs_model_train_split_site):
-                models_site, eval_results_site = [], []
+                models_site, dfs_evals_result_site = [], []
                 for idx_site, df_model_train in enumerate(dfs_model_train_site):
-                    models, eval_results = {}, {}
+                    models, dfs_evals_result = {}, {}
                     for model_name in self.model_params.keys():
 
                         if dfs_model_valid_split_site is not None: 
@@ -579,19 +525,19 @@ class Trial(object):
                         else:
                             weight = None
                         
-                        model_q, evals_result_q = self.train(df_model_train, model_name, df_model_valid=df_model_valid, weight=weight)
+                        model_q, df_evals_result_q = self.train(df_model_train, model_name, df_model_valid=df_model_valid, weight=weight)
 
                         models[model_name] = model_q
-                        eval_results[model_name] = evals_result_q
+                        dfs_evals_result[model_name] = df_evals_result_q
                         pbar.update(1)
 
                     models_site.append(models)
-                    eval_results_site.append(eval_results)
+                    dfs_evals_result_site.append(dfs_evals_result)
                         
                 models_split_site.append(models_site)
-                eval_results_split_site.append(eval_results_site)
+                dfs_evals_result_site_split.append(dfs_evals_result_site)
                 
-        return models_split_site, eval_results_split_site
+        return models_split_site, dfs_evals_result_site_split
     
 
     def load_models(self, path=None):
@@ -601,10 +547,10 @@ class Trial(object):
         model_files = glob.glob(model_path+'*.txt')
         model_names = list(set([file.split('models_')[1].split('_q_quantile')[0] for file in model_files]))
 
-        model_split_site = []
+        models_split_site = []
         with tqdm(total=len(splits)*len(sites)*len(model_names)) as pbar:
             for split in splits:    
-                model_site = []
+                models_site = []
                 for site in sites:
                     model_q = {}
                     for model_name in model_names:
@@ -625,10 +571,10 @@ class Trial(object):
                                 
                         pbar.update(1)
 
-                    model_site.append(model_q)
-                model_split_site.append(model_site)
+                    models_site.append(model_q)
+                models_split_site.append(model_site)
                 
-        return model_split_site
+        return models_split_site
 
 
     def predict(self, df_X, model_q, model_name, return_shap=False): 
@@ -835,6 +781,8 @@ class Trial(object):
             os.makedirs(self.trial_path+'/'+'dfs_y_pred_valid')
         if self.save_options['model'] == True:
             os.makedirs(self.trial_path+'/'+'models')
+        if self.save_options['evals'] == True:
+            os.makedirs(self.trial_path+'/'+'dfs_eval_result')        
         if self.save_options['loss'] == True:
             os.makedirs(self.trial_path+'/'+'dfs_loss_train')
             os.makedirs(self.trial_path+'/'+'dfs_loss_valid')
@@ -901,7 +849,7 @@ class Trial(object):
  
         if self.save_options['prediction'] == True:
             for key in result_prediction.keys():
-                for split in range(len(result_prediction[key][model_name])):
+                for split in range(len(result_prediction[key])):
                     for model_name in self.model_params.keys():
                         dfs = [df[model_name] for df in result_prediction[key][split]]
                         df = pd.concat(dfs, axis=1, keys=self.sites)
@@ -909,24 +857,19 @@ class Trial(object):
 
         if self.save_options['model'] == True:
             for key in result_model.keys():
-                for split in range(len(result_model[key][model_name])):
-                    for site in range(len(result_model[key][model_name][0])):
+                for split in range(len(result_model[key])):
+                    for site in range(len(result_model[key][0])):
                         for model_name in self.model_params.keys():
                             model_q = result_model[key][split][site][model_name]
                             self.save_model(model_q, key, model_name, split, site)
 
         if self.save_options['evals'] == True:
             for key in result_evals.keys():
-                for model_name in self.model_params.keys():
-                    for split in range(len(result_evals[key][model_name])):
-                        data = result_evals[key][model_name][split]
-                        data = {(level1_key, level2_key, level3_key): pd.Series(values)
-                                for level1_key, level2_dict in zip(self.sites,data)
-                                for level2_key, level3_dict in level2_dict.items()
-                                for level3_key, values in level3_dict.items()}
-                        df = pd.DataFrame(data)
-                        df.index.name = 'trees'
-                        self.save_data_prediction_evals_loss(df, key, model, split, 'all')      
+                for split in range(len(result_evals[key])):
+                    for model_name in self.model_params.keys():
+                        dfs = [df[model_name] for df in result_evals[key][split]]
+                        df = pd.concat(dfs, axis=1, keys=self.sites)
+                        self.save_data_prediction_evals_loss(df, key, model_name, split, 'all')      
 
         if self.save_options['loss'] == True:
             for key in result_loss.keys():
@@ -966,7 +909,7 @@ class Trial(object):
         dfs_X_train_split_site, dfs_y_train_split_site, dfs_model_train_split_site, weight_train_split_site = self.generate_dataset_split_site(df, split_set='train')
         dfs_X_valid_split_site, dfs_y_valid_split_site, dfs_model_valid_split_site, _ = self.generate_dataset_split_site(df, split_set='valid')
 
-        models_split_site, eval_results_split_site = self.train_model_split_site(dfs_model_train_split_site, dfs_model_valid_split_site=dfs_model_valid_split_site, weight_train_split_site=weight_train_split_site)
+        models_split_site, dfs_eval_result_split_site = self.train_model_split_site(dfs_model_train_split_site, dfs_model_valid_split_site=dfs_model_valid_split_site, weight_train_split_site=weight_train_split_site)
 
         dfs_y_pred_train_split_site = self.predict_split_site(dfs_X_train_split_site, models_split_site)
         dfs_y_pred_valid_split_site = self.predict_split_site(dfs_X_valid_split_site, models_split_site)
@@ -979,7 +922,7 @@ class Trial(object):
                        'dfs_y_train': dfs_y_train_split_site,
                        'dfs_y_valid': dfs_y_valid_split_site}
         result_model = {'models': models_split_site}
-        result_evals = {'eval_results': eval_results_split_site}
+        result_evals = {'dfs_eval_result': dfs_eval_result_split_site}
         result_prediction = {'dfs_y_pred_train': dfs_y_pred_train_split_site,
                              'dfs_y_pred_valid': dfs_y_pred_valid_split_site}
         result_loss = {'dfs_loss_train': dfs_loss_train_split_site,

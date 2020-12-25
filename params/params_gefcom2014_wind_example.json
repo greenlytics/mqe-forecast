@@ -8,10 +8,10 @@
   "filename_preprocessed_data": "gefcom2014-wind-preprocessed.csv",
   "data_resolution": "60min",
   "datetime_splits":
-    {"train": [["2012-01-01 01:00:00", "2012-10-01 00:00:00"],
-               ["2012-01-01 01:00:00", "2013-12-01 00:00:00"]],
-     "valid": [["2012-10-01 01:00:00", "2012-11-01 00:00:00"],
-               ["2013-12-01 01:00:00", "2014-01-01 00:00:00"]]},
+    {"train": [[["2012-01-01 01:00:00", "2012-10-01 00:00:00"],
+               ["2012-01-01 01:00:00", "2013-12-01 00:00:00"]]],
+     "valid": [[["2012-10-01 01:00:00", "2012-11-01 00:00:00"],
+                ["2013-12-01 01:00:00", "2014-01-01 00:00:00"]]]},
   "sites": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
   "features": ["Utot10", "Theta10", "Utot100", "Theta100"],
   "target": "TARGETVAR",
@@ -27,33 +27,28 @@
      "quantile_postprocess": "sorting",
      "target_min_max": [0, 1]},
   "model_params":
-      {"lightgbm":
-       {
-         "learning_rate": 0.1,
-         "num_trees": 20,
-         "boosting": "gbdt",
-         "max_leaves": 32,
-         "max_depth": 10,
-         "min_data_in_leaf": 20,
-         "max_bin": 30,
-         "bagging_fraction": 1,
-         "bagging_freq": 0,
-         "feature_fraction": 1,
-         "early_stopping": 5,
-         "lambda_l1": 0.0,
-         "lambda_l2": 0.0,
-         "verbose": -1,
-         "num_threads": 1
-       }
+    {"lightgbm":
+      {"boosting_type": "gbdt",
+      "num_trees": 20,
+      "learning_rate": 0.1,
+      "max_depth": 8,
+      "min_data_in_leaf": 20,
+      "max_leaves": 32,
+      "bagging_fraction": 1,
+      "bagging_freq": 0,
+      "feature_fraction": 1,
+      "lambda_l1": 0.0,
+      "lambda_l2": 0.001,
+      "kwargs": {"max_bin": 30, "n_jobs": 1}}     
       },
   "weight_params":
     {"weight_end": 0.5,
      "weight_shape": 80},
   "save_options":
-     {"data": false,
-      "prediction": false,
-      "model": false,
-      "evals": false,
+     {"data": true,
+      "prediction": true,
+      "model": true,
+      "evals": true,
       "loss": true,
       "overall_score": true}
 }

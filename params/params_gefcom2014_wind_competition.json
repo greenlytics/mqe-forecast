@@ -1,5 +1,5 @@
 {
-  "trial_name": "trial11122",
+  "trial_name": "trial_final_test2",
   "trial_comment": "test",
   "path_result": "./result/gefcom2014-wind/",
   "path_raw_data": "./data/gefcom2014/raw/",
@@ -82,8 +82,8 @@
   "model_params":
     {"lightgbm":
       {"boosting_type": "gbdt",
-      "num_trees": 300,
-      "learning_rate": 0.2,
+      "num_trees": 200,
+      "learning_rate": 0.1,
       "max_depth": 8,
       "min_data_in_leaf": 50,
       "max_leaves": 128,
@@ -92,14 +92,13 @@
       "feature_fraction": 1,
       "lambda_l1": 0.0,
       "lambda_l2": 0.001,
-      "early_stopping": 30,
-      "kwargs": {"max_bin": 30}}
+      "kwargs": {"max_bin": 30, "n_jobs": 1}}
       },
   "save_options":
-     {"data": false,
-      "prediction": false,
-      "model": false,
-      "evals": false,
+     {"data": true,
+      "prediction": true,
+      "model": true,
+      "evals": true,
       "loss": true,
       "overall_score": true}
 }

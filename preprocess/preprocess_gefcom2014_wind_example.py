@@ -3,10 +3,14 @@
 import os
 import sys
 import json
+import itertools
 import datetime
 import numpy as np
 import pandas as pd
 
+from windpowerlib.wind_turbine import WindTurbine
+from windpowerlib.wind_farm import WindFarm
+from windpowerlib.turbine_cluster_modelchain import TurbineClusterModelChain
 
 def load_data(path, filename, header=0):
 
@@ -74,6 +78,30 @@ def preprocess_wind(df, target, features):
         for feature in df_features.columns:
             df.loc[:, (farm, feature)] = df_features[feature]
 
+    # Physical forecast
+    columns = [df.columns.levels[0], ['wind_speed'], [10, 100]]
+    df_weather = pd.DataFrame(columns=pd.MultiIndex.from_product(columns))
+    for farm, height in itertools.product(columns[0], columns[2]):
+        df_weather.loc[:,(farm,'wind_speed',height)] = df.loc[:,(farm,'Utot'+str(height))]
+    for farm in df.columns.levels[0]: 
+        df_weather.loc[:,(farm, 'roughness_length', 0)] = 0.03
+
+    wt = WindTurbine(turbine_type='E-126/4200',
+                    hub_height=135,
+                    rotor_diameter=127)
+    wf = WindFarm(name='GEFCom2014',
+                wind_turbine_fleet=[{'wind_turbine': wt,
+                                     'number_of_turbines': 30}])
+    wf.efficiency = 1.0
+    mc = TurbineClusterModelChain(wf, wake_losses_model=None)
+
+    for farm in df_weather.columns.levels[0]:
+        power = mc.run_model(df_weather[farm]).power_output
+        del mc.power_output
+        power_norm = power/wf.nominal_power
+        df.loc[:,(farm,'P_out')] = power_norm
+
+    # Select only features specified in parameter file
     df_temp = pd.DataFrame(index=df.index, columns=pd.MultiIndex.from_product([df.columns.levels[0], [target]+features]))
     df_temp.loc[:, pd.IndexSlice[:, [target]+features]] = df.loc[:, pd.IndexSlice[:, [target]+features]]
 
