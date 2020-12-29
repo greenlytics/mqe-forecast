@@ -68,12 +68,19 @@
       "O_UTot100_9": [-2, -1, 1, 2], 
       "O_UTot100_10": [-2, -1, 1, 2]
     },
+  "categorical_features": "",
   "target": "TARGETVAR",
   "diff_target_with_physical": false,
   "target_smoothing_window": 1,
+  "early_stopping_by_cv": {
+    "enabled": false,
+    "nfold": 3,
+    "max_num_rounds": 500,
+    "early_stopping": 30
+  },
   "parallel_processing": 
   {"backend": "threading",
-   "n_workers": 4},
+   "n_workers": 6},
   "regression_params":
     {"type": ["quantile"],
      "alpha_range": [0.01, 1.0, 0.01], 
