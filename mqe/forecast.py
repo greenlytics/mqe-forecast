@@ -259,7 +259,7 @@ class Trial(object):
         return dfs_X_split_site, dfs_y_split_site, dfs_model_split_site, weight_split_site
 
 
-    def create_fit_model(self, model_name, df_model_train, objective='mean', alpha=None, df_model_valid=None, weight=None):
+    def create_fit_model(self, model_name, df_model_train, objective='mean', alpha=None, df_model_valid=None, weight=None, num_rounds=None, early_stopping=None):
         # Create and fit model. This method could potentially be split up in create and fit seperately. 
         
         if df_model_valid is not None:
@@ -278,34 +278,7 @@ class Trial(object):
                 eval_key_name = 'quantile'
             else: 
                 raise ValueError("'objective' for lightgbm must be either 'mean' or 'quantile'")
-            
-            if self.early_stopping_by_cv.get("enabled", None) == True:
-                train_set = lgb.Dataset(df_model_train[self.all_features], 
-                                        label=df_model_train[self.target], 
-                                        weight=weight, 
-                                        params={'verbose': -1}, 
-                                        free_raw_data=False)
-                model_p = self.model_params[model_name].copy()
-                if 'kwargs' in model_p:
-                    model_p_kwargs = model_p['kwargs']
-                    model_p = {**model_p,
-                               **model_p_kwargs}
-                    del model_p['kwargs']
-                cv_metrics = lgb.cv({**model_p, 'verbose': -1},
-                                   train_set,
-                                   num_boost_round=self.early_stopping_by_cv.get("max_num_rounds", 500),
-                                   nfold=self.early_stopping_by_cv.get("nfold", 3),
-                                   stratified=self.early_stopping_by_cv.get("stratified", False),
-                                   metrics=[eval_key_name],
-                                   verbose_eval=-1, 
-                                   early_stopping_rounds=self.early_stopping_by_cv.get("early_stopping", 30)
-                                   )                
-                num_rounds = np.argmin(cv_metrics[f'{eval_key_name}-mean'])
-                early_stopping = None
-            else:
-                num_rounds = self.model_params[model_name].get('num_trees', 100)
-                early_stopping = self.model_params[model_name].get("early_stopping", None)
-
+                     
             model = lgb.LGBMRegressor(objective=objective_lgb,
                                       alpha=alpha,
                                       boosting_type=self.model_params[model_name].get('boosting_type', 'gbdt'),
@@ -344,7 +317,7 @@ class Trial(object):
 
             model = xgboost.XGBRegressor(objective=objective_xgb,
                                          booster=self.model_params[model_name].get('booster', 'gbtree'),
-                                         n_estimators=self.model_params[model_name].get('num_trees', 100),
+                                         n_estimators=num_rounds,
                                          learning_rate=self.model_params[model_name].get('learning_rate', 0.1), 
                                          max_depth=self.model_params[model_name].get('max_depth', -1), 
                                          min_child_samples=self.model_params[model_name].get('min_data_in_leaf', 20), 
@@ -361,7 +334,7 @@ class Trial(object):
                       df_model_train[[self.target]],
                       sample_weight=weight,
                       eval_set=eval_set,
-                      early_stopping_rounds=self.model_params[model_name].get("early_stopping", None),
+                      early_stopping_rounds=early_stopping,
                       verbose=False,
                       callbacks=None)
 
@@ -381,7 +354,7 @@ class Trial(object):
             model = lgb.CatBoostRegressor(objective=objective_cb,
                                           boosting_type=self.model_params[model_name].get('boosting_type', 'Plain'),
                                           grow_policy=self.model_params[model_name].get('grow_policy', 'SymmetricTree'),
-                                          n_estimators=self.model_params[model_name].get('num_trees', 100),
+                                          n_estimators=num_rounds,
                                           learning_rate=self.model_params[model_name].get('learning_rate', 0.1), 
                                           max_depth=self.model_params[model_name].get('max_depth', -1), 
                                           min_data_in_leaf=self.model_params[model_name].get('min_data_in_leaf', 20), 
@@ -399,7 +372,7 @@ class Trial(object):
                       df_model_train[[self.target]],
                       sample_weight=weight,
                       eval_set=eval_set, # Catboost already uses train set in eval_set. Therefore, should not be passed here. 
-                      early_stopping_rounds=self.model_params[model_name].get("early_stopping", None),
+                      early_stopping_rounds=early_stopping,
                       verbose=False,
                       cat_features=self.categorical_features,
                       callbacks=None)
@@ -419,7 +392,7 @@ class Trial(object):
             model = skl.ensemble.GradientBoostingRegressor(loss=objective_skb,
                                                            criterion=criterion, 
                                                            alpha=alpha,
-                                                           n_estimators=self.model_params[model_name].get('num_trees', 100),
+                                                           n_estimators=num_rounds,
                                                            learning_rate=self.model_params[model_name].get('learning_rate', 0.1), 
                                                            max_depth=self.model_params[model_name].get('max_depth', 3), 
                                                            min_samples_leaf=self.model_params[model_name].get('min_data_in_leaf', 20), 
@@ -442,7 +415,7 @@ class Trial(object):
                 raise ValueError("'objective' for skboost must be either 'mean'.")
 
             model = skl.ensemble.HistGradientBoostingRegressor(loss=objective_skbh,
-                                                               max_iter=self.model_params[model_name].get('num_trees', 100),
+                                                               max_iter=num_rounds,
                                                                learning_rate=self.model_params[model_name].get('learning_rate', 0.1), 
                                                                max_depth=self.model_params[model_name].get('max_depth', 3), 
                                                                min_samples_leaf=self.model_params[model_name].get('min_data_in_leaf', 20), 
@@ -495,17 +468,68 @@ class Trial(object):
         return model, evals_result
 
 
-    def train(self, df_model_train, model_name, df_model_valid=None, weight=None): 
+    def determine_num_rounds(self, df_model_train, model_name, objective='mean', weight=None):
+        if self.early_stopping_by_cv.get("enabled", None) == True:
+            if model_name.split('_')[0] == 'lightgbm':
+                if objective == 'mean': 
+                    objective_lgb = 'mean_squared_error'
+                    eval_key_name = 'l2'
+                elif objective == 'quantile': 
+                    objective_lgb = 'quantile'
+                    eval_key_name = 'quantile'
+                else: 
+                    raise ValueError("'objective' for lightgbm must be either 'mean' or 'quantile'")
+                                    
+                train_set = lgb.Dataset(df_model_train[self.all_features], 
+                                        label=df_model_train[self.target], 
+                                        weight=weight, 
+                                        params={'verbose': -1}, 
+                                        free_raw_data=False)
+                model_p = self.model_params[model_name].copy()
+                if 'kwargs' in model_p:
+                    model_p_kwargs = model_p['kwargs']
+                    model_p = {**model_p,
+                               **model_p_kwargs}
+                    del model_p['kwargs']
+                cv_metrics = lgb.cv({**model_p,
+                                     'objective': objective_lgb,
+                                     'verbose': -1},
+                                   train_set,
+                                   num_boost_round=self.early_stopping_by_cv.get("max_num_rounds", 500),
+                                   nfold=self.early_stopping_by_cv.get("nfold", 3),
+                                   stratified=self.early_stopping_by_cv.get("stratified", False),
+                                   metrics=[eval_key_name],
+                                   verbose_eval=-1, 
+                                   early_stopping_rounds=self.early_stopping_by_cv.get("early_stopping", 30)
+                                   )                
+                num_rounds = np.argmin(cv_metrics[f'{eval_key_name}-mean'])
+                early_stopping = None
+            else:
+                raise NotImplementedError()
+        else:
+            num_rounds = self.model_params[model_name].get('num_trees', 100)
+            early_stopping = self.model_params[model_name].get("early_stopping", None)
 
+        return num_rounds, early_stopping
+
+
+
+    def train(self, df_model_train, model_name, df_model_valid=None, weight=None): 
+        
         model_q, evals_result_q = {}, {}
         if 'mean' in self.regression_params['type']:
+            num_rounds, early_stopping = self.determine_num_rounds(df_model_train, model_name, objective='mean', weight=weight)
             # Train model for mean
-            model, evals_result = self.create_fit_model(model_name, df_model_train, objective='mean', df_model_valid=df_model_valid, weight=weight)
+            model, evals_result = self.create_fit_model(model_name, df_model_train, 
+                                            objective='mean', df_model_valid=df_model_valid, 
+                                            weight=weight, num_rounds=num_rounds, early_stopping=early_stopping)
 
             model_q['mean'] = model
             evals_result_q['mean'] = evals_result
 
         if 'quantile' in self.regression_params['type']:
+            num_rounds, early_stopping = self.determine_num_rounds(df_model_train, model_name, objective='quantile', weight=weight)
+            
             # Train models for different quantiles
             with joblib.parallel_backend(self.parallel_processing['backend']):
                 results = joblib.Parallel(n_jobs=self.parallel_processing['n_workers'])(
@@ -514,7 +538,9 @@ class Trial(object):
                                                                   objective='quantile',
                                                                   alpha=alpha,
                                                                   df_model_valid=df_model_valid, 
-                                                                  weight=weight)
+                                                                  weight=weight,
+                                                                  num_rounds=num_rounds, 
+                                                                  early_stopping=early_stopping)
                             for alpha in self.alpha_q)
 
             for (model, evals_result), alpha in zip(results, self.alpha_q):
