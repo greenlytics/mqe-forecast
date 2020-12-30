@@ -47,9 +47,10 @@
       "lambda_l2": 0.001,
       "kwargs": {"max_bin": 30, "n_jobs": 1}}
       },
-  "weight_params":
+  "time_weight_params":
     {"weight_end": 0.5,
      "weight_shape": 80},
+  "custom_weight_column": "weights",
   "save_options":
      {"data": true,
       "prediction": true,

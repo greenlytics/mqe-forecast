@@ -105,6 +105,10 @@ def preprocess_wind(df, target, features):
     df_temp = pd.DataFrame(index=df.index, columns=pd.MultiIndex.from_product([df.columns.levels[0], [target]+features]))
     df_temp.loc[:, pd.IndexSlice[:, [target]+features]] = df.loc[:, pd.IndexSlice[:, [target]+features]]
 
+    # Add custom weights
+    for farm in df_temp.columns.levels[0]:
+        df_temp.loc[:, (farm, 'weights')] = 0.5
+
     return df_temp
 
 

@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import sys, os, glob, shutil, json, re
+import time
 import pickle
 import warnings
 import datetime
@@ -95,10 +96,10 @@ class Trial(object):
             self.target_level_weight_params = params_json['target_level_weight_params']
         else:
             self.target_level_weight_params = False     
-        if 'custom_weight_params' in params_json: 
-            self.custom_weight_params = params_json['custom_weight_params']
+        if 'custom_weight_column' in params_json: 
+            self.custom_weight_column = params_json['custom_weight_column']
         else:
-            self.custom_weight_params = False   
+            self.custom_weight_column = False   
 
         if 'datetime_splits' in params_json: 
             self.datetime_splits = params_json['datetime_splits']
@@ -221,8 +222,8 @@ class Trial(object):
             level_weight = 1
 
         # Apply custom sample weighting
-        if self.custom_weight_params:
-            df_custom_weight = df[self.custom_weight_params['column']]
+        if self.custom_weight_column:
+            df_custom_weight = df[self.custom_weight_column]
             custom_weight = df_custom_weight[df_model.index].values
         else:
             custom_weight = 1
@@ -236,6 +237,7 @@ class Trial(object):
         # Generate train and valid splits
 
         print('Generating dataset...')
+        time.sleep(0.2)
         dfs_X_split_site, dfs_y_split_site, dfs_model_split_site, weight_split_site = [], [], [], []
         with tqdm(total=len(self.splits[split_set])*len(self.sites)) as pbar:
             for split in self.splits[split_set]:
@@ -628,7 +630,7 @@ class Trial(object):
                         pbar.update(1)
 
                     models_site.append(model_q)
-                models_split_site.append(model_site)
+                models_split_site.append(models_site)
                 
         return models_split_site
 
@@ -741,6 +743,7 @@ class Trial(object):
         #TODO reformat so that model name is dict inside the lists. 
 
         print('Predicting...')
+        time.sleep(0.2)
         dfs_y_pred_split_site = []
         with tqdm(total=len(dfs_X_split_site[0])*len(dfs_X_split_site)*len(self.model_params.keys())) as pbar:
             for dfs_X_site, model_site in zip(dfs_X_split_site, model_split_site):
@@ -1000,6 +1003,7 @@ class Trial(object):
         # An alternative way is to run our own crossvalidation. Then use out of sample predictions to train a stacked model. 
         # Stacked model could be specified through params_json as a second layer. More than two layers is not necessary. 
         # Things to specify. Which models should be included as input? Which predictions (quantiles) should be included as input? 
+        # Use stacking to create a smooth transition from VAR models to NWP based models.
 
         print('Running parallel cross validation pipeline for trial: {0}...'.format(self.trial_name))
         print('Number of workers: {0}.'.format(self.parallel_processing['n_workers']))
