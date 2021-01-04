@@ -677,7 +677,7 @@ class Trial(object):
                     pass
                 elif self.regression_params['quantile_postprocess'] == 'sorting': 
                     # Lazy post-sorting of quantiles
-                    y_pred_q[idx_q_start:,:] = np.sort(y_pred_q, axis=-1)
+                    y_pred_q[idx_q_start:,:] = np.sort(y_pred_q[idx_q_start:,:], axis=-1)
                 elif self.regression_params['quantile_postprocess'] == 'isotonic_regression': 
                     # Isotonic regression
                     regressor = IsotonicRegression()
