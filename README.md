@@ -1,4 +1,4 @@
-# gbdt-forecast
+# mqe-forecast
 
 ## Introduction
 This code, `gbdt-forecast`, is a method for energy and weather forecasting using gradient boosting decision trees. It considers the forecasting problem as a tabular problem without the  spatio-temporal aspects included in the modelling prior. Instead spatio-temporal features can be included as (lagged) features in the tabular data. The code integrates four most popular gradient boosting implementations:
