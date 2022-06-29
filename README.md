@@ -153,5 +153,5 @@ This is used for making operational predictions.
 2) `load_model_q`
 3) `predict_q`
 
-## Aknowledgement
-The authors of this code would like to thank the Swedish Energy Agency for their financial support for this research work under the grant VindEL project number: 47070-1.
+## Acknowledgement
+The authors of this code would like to thank the Swedish Energy Agency for their financial support for this research work under the grant VindEL projects number: 47070-1 and 44988-1.
